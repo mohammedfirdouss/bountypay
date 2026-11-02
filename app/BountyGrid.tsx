@@ -1,10 +1,18 @@
 "use client";
 
-import { AllCommunityModule, ModuleRegistry, type ColDef, type ICellRendererParams } from "ag-grid-community";
+import {
+  AllCommunityModule,
+  ModuleRegistry,
+  themeQuartz,
+  type ColDef,
+  type ICellRendererParams,
+  type IRowNode,
+  type ModelUpdatedEvent,
+} from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useTransition } from "react";
-import type { Row } from "@/lib/bounty.ts";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import type { Row, State } from "@/lib/bounty.ts";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -15,11 +23,37 @@ type Props = {
   onReject: (id: string) => Promise<void>;
 };
 
+const STATES: State[] = ["held", "judging", "paying", "sent", "failed", "rejected"];
+
+const theme = themeQuartz.withParams({
+  accentColor: "#0070e0",
+  fontFamily: "inherit",
+  fontSize: 14,
+  headerFontWeight: 600,
+  headerBackgroundColor: "#f6f8fb",
+  wrapperBorderRadius: 10,
+  pinnedRowFontWeight: 600,
+  pinnedRowBackgroundColor: "#f6f8fb",
+  autoHeightMinBodyHeight: 84,
+});
+
+const usd = (cents: number) =>
+  (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+
 const verdictOf = (r: Row) => ("verdict" in r ? r.verdict : null);
 
-function Actions({ data, context }: ICellRendererParams<Row, unknown, Omit<Props, "rows">>) {
+const badge = (value: string | null | undefined, prefix = "") =>
+  value ? <span className={`badge badge-${prefix}${value}`}>{value}</span> : null;
+
+const link = (href: string, text: string) => (
+  <a href={href} target="_blank" rel="noreferrer">
+    {text}
+  </a>
+);
+
+function Actions({ data, node, context }: ICellRendererParams<Row, unknown, Omit<Props, "rows">>) {
   const [pending, start] = useTransition();
-  if (!data || !context.canAct) return null;
+  if (!data || node.rowPinned || !context.canAct) return null;
   const run = (fn: (id: string) => Promise<void>) =>
     start(async () => {
       try {
@@ -29,9 +63,9 @@ function Actions({ data, context }: ICellRendererParams<Row, unknown, Omit<Props
       }
     });
   return (
-    <span style={{ display: "flex", gap: 6 }}>
+    <span className="actions">
       {data.actions.includes("approve") && (
-        <button disabled={pending} onClick={() => run(context.onApprove)}>
+        <button className="primary" disabled={pending} onClick={() => run(context.onApprove)}>
           Approve
         </button>
       )}
@@ -44,64 +78,195 @@ function Actions({ data, context }: ICellRendererParams<Row, unknown, Omit<Props
   );
 }
 
-const link = (href: string, text: string) => (
-  <a href={href} target="_blank" rel="noreferrer">
-    {text}
-  </a>
-);
+function Confidence({ value }: ICellRendererParams<Row, number | null>) {
+  if (value == null) return null;
+  const pct = Math.round(value * 100);
+  return (
+    <span className="confidence">
+      <span className="confidence-bar">
+        <span style={{ width: `${pct}%` }} />
+      </span>
+      {pct}%
+    </span>
+  );
+}
+
+const oneCondition = { maxNumConditions: 1 };
 
 const columns: ColDef<Row>[] = [
   {
     headerName: "Bounty",
     field: "id",
-    cellRenderer: ({ data }: ICellRendererParams<Row>) =>
-      data && link(`https://github.com/${data.repo}/issues/${data.issue}`, data.id),
+    width: 165,
+    filter: "agTextColumnFilter",
+    filterParams: oneCondition,
+    cellRenderer: ({ data, node }: ICellRendererParams<Row>) =>
+      data && (node.rowPinned ? data.id : link(`https://github.com/${data.repo}/issues/${data.issue}`, data.id)),
   },
   {
     headerName: "PR",
     field: "pr",
-    width: 90,
-    cellRenderer: ({ data }: ICellRendererParams<Row>) => data && link(data.prUrl, `#${data.pr}`),
+    width: 70,
+    getQuickFilterText: (p) => `#${p.value}`,
+    cellRenderer: ({ data, node }: ICellRendererParams<Row>) => data && !node.rowPinned && link(data.prUrl, `#${data.pr}`),
   },
-  { headerName: "Payee", field: "payee" },
-  { headerName: "Amount", field: "amount", width: 110, valueFormatter: (p) => `$${(p.value / 100).toFixed(2)}` },
-  { headerName: "State", field: "state", width: 110 },
-  { headerName: "Held because", width: 150, valueGetter: (p) => (p.data && "reason" in p.data ? p.data.reason : "") },
+  { headerName: "Payee", field: "payee", width: 165, filter: "agTextColumnFilter", filterParams: oneCondition },
   {
+    headerName: "Amount",
+    field: "amount",
+    width: 115,
+    type: "rightAligned",
+    filter: "agNumberColumnFilter",
+    filterParams: oneCondition,
+    filterValueGetter: (p) => (p.data ? p.data.amount / 100 : null),
+    valueFormatter: (p) => (p.value == null ? "" : usd(p.value)),
+  },
+  { headerName: "State", field: "state", width: 105, cellRenderer: (p: ICellRendererParams<Row, string>) => badge(p.value) },
+  {
+    colId: "reason",
+    headerName: "Held because",
+    width: 130,
+    valueGetter: (p) => (p.data && "reason" in p.data ? p.data.reason : ""),
+    valueFormatter: (p) => p.value.replaceAll("_", " "),
+  },
+  {
+    colId: "confidence",
     headerName: "Confidence",
-    width: 120,
+    width: 125,
     valueGetter: (p) => (p.data && verdictOf(p.data)?.confidence) ?? null,
     valueFormatter: (p) => (p.value == null ? "" : `${Math.round(p.value * 100)}%`),
+    cellRenderer: Confidence,
   },
   {
+    colId: "reasoning",
     headerName: "Claude's reasoning",
     flex: 1,
-    minWidth: 280,
+    minWidth: 200,
     wrapText: true,
     autoHeight: true,
     valueGetter: (p) => (p.data && verdictOf(p.data)?.reasoning) ?? (p.data && "error" in p.data ? p.data.error : ""),
   },
-  { headerName: "Payout batch", valueGetter: (p) => (p.data && "payoutBatchId" in p.data ? p.data.payoutBatchId : "") },
-  { headerName: "PayPal status", width: 130, valueGetter: (p) => (p.data && "payoutStatus" in p.data ? p.data.payoutStatus : "") },
-  { headerName: "Updated", field: "updatedAt", valueFormatter: (p) => new Date(p.value).toLocaleString() },
-  { headerName: "Actions", width: 170, pinned: "right", sortable: false, cellRenderer: Actions },
+  { colId: "batch", headerName: "Payout batch", hide: true, valueGetter: (p) => (p.data && "payoutBatchId" in p.data ? p.data.payoutBatchId : "") },
+  {
+    colId: "paypal",
+    headerName: "PayPal status",
+    width: 125,
+    valueGetter: (p) => (p.data && "payoutStatus" in p.data ? p.data.payoutStatus : ""),
+    cellRenderer: (p: ICellRendererParams<Row, string>) => badge(p.value, "pp-"),
+  },
+  {
+    headerName: "Updated",
+    field: "updatedAt",
+    hide: true,
+  },
+  { colId: "actions", headerName: "Actions", width: 160, pinned: "right", sortable: false, cellRenderer: Actions },
 ];
+
+const rowClassRules = {
+  "row-needs-review": (p: { data?: Row }) => p.data?.state === "held" || p.data?.state === "failed",
+};
+
+const sum = (rows: Row[]) => rows.reduce((n, r) => n + r.amount, 0);
 
 export function BountyGrid({ rows, ...context }: Props) {
   const router = useRouter();
+  const grid = useRef<AgGridReact<Row>>(null);
+  const [search, setSearch] = useState("");
+  const [stateFilter, setStateFilter] = useState<State | null>(null);
+  const stateRef = useRef(stateFilter);
+  const [shown, setShown] = useState({ count: 0, amount: 0 });
+
   useEffect(() => {
     const timer = setInterval(() => router.refresh(), 3000);
     return () => clearInterval(timer);
   }, [router]);
 
+  useEffect(() => {
+    stateRef.current = stateFilter;
+    grid.current?.api?.onFilterChanged();
+  }, [stateFilter]);
+
+  const recount = useCallback(({ api }: ModelUpdatedEvent<Row>) => {
+    let count = 0;
+    let amount = 0;
+    api.forEachNodeAfterFilter((n) => {
+      count++;
+      amount += n.data?.amount ?? 0;
+    });
+    setShown((s) => (s.count === count && s.amount === amount ? s : { count, amount }));
+  }, []);
+
+  const held = rows.filter((r) => r.state === "held");
+  const counts = Object.fromEntries(STATES.map((s) => [s, rows.filter((r) => r.state === s).length]));
+
   return (
-    <AgGridReact<Row>
-      rowData={rows}
-      columnDefs={columns}
-      context={context}
-      getRowId={(p) => p.data.id}
-      domLayout="autoHeight"
-      overlayNoRowsTemplate="No bounties yet. Merge a PR that closes a bounty:<usd> issue, or run the demo script."
-    />
+    <section className="board">
+      <dl className="summary">
+        <div>
+          <dt>Paid out</dt>
+          <dd>{usd(sum(rows.filter((r) => r.state === "sent")))}</dd>
+        </div>
+        <div className={held.length ? "attention" : undefined}>
+          <dt>Held for review</dt>
+          <dd>
+            {held.length} <small>· {usd(sum(held))}</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Bounties</dt>
+          <dd>{rows.length}</dd>
+        </div>
+      </dl>
+
+      <div className="toolbar">
+        <input
+          type="search"
+          placeholder="Search bounty, payee, PR, state, reasoning…"
+          aria-label="Search bounties"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="chips" role="group" aria-label="Filter by state">
+          <button aria-pressed={stateFilter === null} onClick={() => setStateFilter(null)}>
+            All {rows.length}
+          </button>
+          {STATES.filter((s) => counts[s]).map((s) => (
+            <button key={s} aria-pressed={stateFilter === s} onClick={() => setStateFilter(stateFilter === s ? null : s)}>
+              {s} {counts[s]}
+            </button>
+          ))}
+        </div>
+        <button
+          className="export"
+          onClick={() =>
+            grid.current?.api.exportDataAsCsv({
+              fileName: "bountypay.csv",
+              skipPinnedBottom: true,
+              columnKeys: grid.current.api.getColumns()?.filter((c) => c.getColId() !== "actions"),
+            })
+          }
+        >
+          Export CSV
+        </button>
+      </div>
+
+      <AgGridReact<Row>
+        ref={grid}
+        theme={theme}
+        rowData={rows}
+        columnDefs={columns}
+        context={context}
+        getRowId={(p) => (p.rowPinned ? "total" : p.data.id)}
+        quickFilterText={search}
+        isExternalFilterPresent={() => stateRef.current !== null}
+        doesExternalFilterPass={(n: IRowNode<Row>) => n.data?.state === stateRef.current}
+        onGridReady={(e) => e.api.setGridOption("popupParent", document.body)}
+        onModelUpdated={recount}
+        pinnedBottomRowData={[{ id: `${shown.count} shown`, amount: shown.amount }]}
+        rowClassRules={rowClassRules}
+        domLayout="autoHeight"
+        overlayNoRowsTemplate="No bounties yet. Merge a PR that closes a bounty:<usd> issue, or run the demo script."
+      />
+    </section>
   );
 }
