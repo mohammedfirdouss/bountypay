@@ -53,7 +53,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\"action\":\"closed\",\"number\":10,\"pull_request\":{\"number\":10,\"merged\":true,\"title\":\"Fall back to defaults when the config file is empty\",\"body\":\"Fixes #1\\n\\nAn empty file parses to null, so merge it with the defaults instead.\\n\\nPayPal: ada@example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/10\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
+          "raw": "{\"action\":\"closed\",\"number\":10,\"pull_request\":{\"number\":10,\"merged\":true,\"title\":\"Fall back to defaults when the config file is empty\",\"body\":\"Fixes #1\\n\\nAn empty file parses to null, so merge it with the defaults instead.\\n\\nPayPal: sb-fx2ju53547833@personal.example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/10\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
           "options": {
             "raw": {
               "language": "json"
@@ -88,7 +88,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\"action\":\"closed\",\"number\":11,\"pull_request\":{\"number\":11,\"merged\":true,\"title\":\"Tidy the HTTP client docs\",\"body\":\"Fixes #2\\n\\nPayPal: bob@example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/11\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
+          "raw": "{\"action\":\"closed\",\"number\":11,\"pull_request\":{\"number\":11,\"merged\":true,\"title\":\"Tidy the HTTP client docs\",\"body\":\"Fixes #2\\n\\nPayPal: sb-fx2ju53547833@personal.example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/11\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
           "options": {
             "raw": {
               "language": "json"
@@ -228,7 +228,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\"action\":\"closed\",\"number\":10,\"pull_request\":{\"number\":10,\"merged\":true,\"title\":\"Fall back to defaults when the config file is empty\",\"body\":\"Fixes #1\\n\\nAn empty file parses to null, so merge it with the defaults instead.\\n\\nPayPal: ada@example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/10\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
+          "raw": "{\"action\":\"closed\",\"number\":10,\"pull_request\":{\"number\":10,\"merged\":true,\"title\":\"Fall back to defaults when the config file is empty\",\"body\":\"Fixes #1\\n\\nAn empty file parses to null, so merge it with the defaults instead.\\n\\nPayPal: sb-fx2ju53547833@personal.example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/10\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
           "options": {
             "raw": {
               "language": "json"
