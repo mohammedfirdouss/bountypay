@@ -81,9 +81,12 @@ export async function sendPayout(p: {
   return { ok: false, error: [json.name, json.message].filter(Boolean).join(": ") || `HTTP ${res.status}` };
 }
 
-export type PayoutEvent = { kind: "status"; batchId: string; status: PayoutStatus; at: string } | { kind: "ignored" };
+export type PayoutEvent =
+  | { kind: "status"; batchId: string; status: PayoutStatus; at: string }
+  | { kind: "ignored" }
+  | { kind: "unauthorized" };
 
-export async function parsePayoutWebhook(raw: string, headers: Headers): Promise<PayoutEvent | null> {
+export async function parsePayoutWebhook(raw: string, headers: Headers): Promise<PayoutEvent> {
   const h = (name: string) => JSON.stringify(headers.get(name) ?? "");
   // Splice the raw body in rather than re-serializing it: PayPal checks the event bytes it sent.
   const body = `{"auth_algo":${h("paypal-auth-algo")},"cert_url":${h("paypal-cert-url")},"transmission_id":${h("paypal-transmission-id")},"transmission_sig":${h("paypal-transmission-sig")},"transmission_time":${h("paypal-transmission-time")},"webhook_id":${JSON.stringify(process.env.PAYPAL_WEBHOOK_ID ?? "")},"webhook_event":${raw}}`;
@@ -92,7 +95,7 @@ export async function parsePayoutWebhook(raw: string, headers: Headers): Promise
     headers: { Authorization: `Bearer ${await token()}`, "Content-Type": "application/json" },
     body,
   });
-  if (!res.ok || (await res.json()).verification_status !== "SUCCESS") return null;
+  if (!res.ok || (await res.json()).verification_status !== "SUCCESS") return { kind: "unauthorized" };
 
   const event = JSON.parse(raw);
   const m = /^PAYMENT\.PAYOUTS-ITEM\.([A-Z]+)$/.exec(event.event_type ?? "");
