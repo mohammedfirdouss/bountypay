@@ -84,7 +84,7 @@ const columns: ColDef<Row>[] = [
   { headerName: "Payout batch", valueGetter: (p) => (p.data && "payoutBatchId" in p.data ? p.data.payoutBatchId : "") },
   { headerName: "PayPal status", width: 130, valueGetter: (p) => (p.data && "payoutStatus" in p.data ? p.data.payoutStatus : "") },
   { headerName: "Updated", field: "updatedAt", valueFormatter: (p) => new Date(p.value).toLocaleString() },
-  { headerName: "Actions", width: 180, sortable: false, cellRenderer: Actions },
+  { headerName: "Actions", width: 170, pinned: "right", sortable: false, cellRenderer: Actions },
 ];
 
 export function BountyGrid({ rows, ...context }: Props) {
