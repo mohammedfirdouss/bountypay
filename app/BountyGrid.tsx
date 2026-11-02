@@ -97,7 +97,8 @@ const columns: ColDef<Row>[] = [
   {
     headerName: "Bounty",
     field: "id",
-    width: 165,
+    width: 170,
+    tooltipField: "id",
     filter: "agTextColumnFilter",
     filterParams: oneCondition,
     cellRenderer: ({ data, node }: ICellRendererParams<Row>) =>
@@ -106,11 +107,18 @@ const columns: ColDef<Row>[] = [
   {
     headerName: "PR",
     field: "pr",
-    width: 70,
+    width: 64,
     getQuickFilterText: (p) => `#${p.value}`,
     cellRenderer: ({ data, node }: ICellRendererParams<Row>) => data && !node.rowPinned && link(data.prUrl, `#${data.pr}`),
   },
-  { headerName: "Payee", field: "payee", width: 165, filter: "agTextColumnFilter", filterParams: oneCondition },
+  {
+    headerName: "Payee",
+    field: "payee",
+    width: 150,
+    tooltipField: "payee",
+    filter: "agTextColumnFilter",
+    filterParams: oneCondition,
+  },
   {
     headerName: "Amount",
     field: "amount",
@@ -121,18 +129,24 @@ const columns: ColDef<Row>[] = [
     filterValueGetter: (p) => (p.data ? p.data.amount / 100 : null),
     valueFormatter: (p) => (p.value == null ? "" : usd(p.value)),
   },
-  { headerName: "State", field: "state", width: 105, cellRenderer: (p: ICellRendererParams<Row, string>) => badge(p.value) },
+  {
+    headerName: "State",
+    field: "state",
+    width: 95,
+    headerTooltip: "sent means PayPal accepted the payout. PayPal status says what happened to the money.",
+    cellRenderer: (p: ICellRendererParams<Row, string>) => badge(p.value),
+  },
   {
     colId: "reason",
     headerName: "Held because",
-    width: 130,
+    width: 165,
     valueGetter: (p) => (p.data && "reason" in p.data ? p.data.reason : ""),
     valueFormatter: (p) => p.value.replaceAll("_", " "),
   },
   {
     colId: "confidence",
     headerName: "Confidence",
-    width: 125,
+    width: 140,
     valueGetter: (p) => (p.data && verdictOf(p.data)?.confidence) ?? null,
     valueFormatter: (p) => (p.value == null ? "" : `${Math.round(p.value * 100)}%`),
     cellRenderer: Confidence,
@@ -141,16 +155,18 @@ const columns: ColDef<Row>[] = [
     colId: "reasoning",
     headerName: "Claude's reasoning",
     flex: 1,
-    minWidth: 200,
-    wrapText: true,
-    autoHeight: true,
+    minWidth: 240,
+    cellClass: "reasoning",
     valueGetter: (p) => (p.data && verdictOf(p.data)?.reasoning) ?? (p.data && "error" in p.data ? p.data.error : ""),
+    tooltipValueGetter: (p) => p.value,
+    cellRenderer: (p: ICellRendererParams<Row, string>) => <span className="clamp">{p.value}</span>,
   },
   { colId: "batch", headerName: "Payout batch", hide: true, valueGetter: (p) => (p.data && "payoutBatchId" in p.data ? p.data.payoutBatchId : "") },
   {
     colId: "paypal",
     headerName: "PayPal status",
-    width: 125,
+    width: 135,
+    headerTooltip: "What PayPal did with the money: succeeded, unclaimed, failed, denied, and so on.",
     valueGetter: (p) => (p.data && "payoutStatus" in p.data ? p.data.payoutStatus : ""),
     cellRenderer: (p: ICellRendererParams<Row, string>) => badge(p.value, "pp-"),
   },
@@ -204,7 +220,7 @@ export function BountyGrid({ rows, ...context }: Props) {
       <dl className="summary">
         <div>
           <dt>Paid out</dt>
-          <dd>{usd(sum(rows.filter((r) => r.state === "sent")))}</dd>
+          <dd>{usd(sum(rows.filter((r) => r.state === "sent" && r.payoutStatus === "succeeded")))}</dd>
         </div>
         <div className={held.length ? "attention" : undefined}>
           <dt>Held for review</dt>
@@ -264,6 +280,8 @@ export function BountyGrid({ rows, ...context }: Props) {
         onModelUpdated={recount}
         pinnedBottomRowData={[{ id: `${shown.count} shown`, amount: shown.amount }]}
         rowClassRules={rowClassRules}
+        rowHeight={52}
+        tooltipShowDelay={300}
         domLayout="autoHeight"
         overlayNoRowsTemplate="No bounties yet. Merge a PR that closes a bounty:<usd> issue, or run the demo script."
       />

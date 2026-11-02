@@ -2,7 +2,7 @@ import { refresh } from "next/cache";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { approve, listBounties, POLICY, reject } from "@/lib/bounty.ts";
+import { approve, checkPendingPayouts, listBounties, POLICY, reject } from "@/lib/bounty.ts";
 import { BountyGrid } from "./BountyGrid.tsx";
 
 const COOKIE = "bountypay_token";
@@ -42,8 +42,10 @@ export default function Page() {
       <header>
         <h1>BountyPay</h1>
         <p>
-          Claude pays a merged bounty PR through PayPal when it is at least {POLICY.minConfidence * 100}% sure the diff
-          resolves the issue and the bounty is at most ${POLICY.cap / 100}. Everything else waits here for a maintainer.
+          Claude sends a merged bounty PR's payout to PayPal when it is at least {POLICY.minConfidence * 100}% sure the
+          diff resolves the issue and the bounty is at most ${POLICY.cap / 100}. Everything else waits here for a
+          maintainer. A sent row means PayPal accepted the payout. The PayPal status column says what happened to the
+          money.
         </p>
       </header>
       <Suspense fallback={<p>Loading bounties…</p>}>
@@ -56,6 +58,7 @@ export default function Page() {
 async function Dashboard() {
   await connection();
   const canAct = await authorized();
+  await checkPendingPayouts();
   return (
     <>
       {!canAct && (

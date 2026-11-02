@@ -22,7 +22,7 @@ Preconditions:
 - **Buttons present.** Run `node .claude/skills/verify-bountypay/scripts/ui.mjs "$RUN_DIR" snapshot review-before`. Held rows end with `buttons=Approve,Reject`.
 - **Reject.** Run `node .claude/skills/verify-bountypay/scripts/ui.mjs "$RUN_DIR" click 'bountypay/demo#3' Reject review-reject`. The snapshot shows `#3` in `rejected` with no buttons. `state.mjs` agrees, and the server log has `[demo comment] bountypay/demo#12: BountyPay: a maintainer declined`.
 - **Approve.** Run `node .claude/skills/verify-bountypay/scripts/ui.mjs "$RUN_DIR" click 'bountypay/demo#2' Approve review-approve`.
-  - With PayPal keys, the row ends `sent` with a `payout_batch_id`, and the log has a "sent $40.00" comment.
+  - With PayPal keys, the row ends `sent` with a `payout_batch_id`, and the log has a "PayPal accepted a $40.00 payout" comment.
   - Without them, the run writes `review-approve.alert.txt` containing `PayPal OAuth: 401` and the row stays `paying`. Report the payout as unverified.
 - **Proof.** Save `state.mjs --out "$RUN_DIR/evidence/review.json"` alongside the snapshots.
 

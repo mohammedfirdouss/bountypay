@@ -13,6 +13,7 @@ export const PAYOUT_STATUSES = [
   "blocked",
   "refunded",
   "canceled",
+  "denied",
 ] as const;
 export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
 
@@ -79,6 +80,33 @@ export async function sendPayout(p: {
     .find(Boolean);
   if (original) return { ok: true, batchId: original };
   return { ok: false, error: [json.name, json.message].filter(Boolean).join(": ") || `HTTP ${res.status}` };
+}
+
+const ITEM_STATUS: Record<string, PayoutStatus> = {
+  SUCCESS: "succeeded",
+  FAILED: "failed",
+  PENDING: "pending",
+  UNCLAIMED: "unclaimed",
+  RETURNED: "returned",
+  ONHOLD: "held",
+  BLOCKED: "blocked",
+  REFUNDED: "refunded",
+  DENIED: "denied",
+};
+
+/** Reads the batch's single item status from PayPal. Throws when PayPal does not answer with one. */
+export async function fetchPayoutStatus(batchId: string): Promise<PayoutStatus> {
+  const res = await fetch(`${BASE}/v1/payments/payouts/${encodeURIComponent(batchId)}`, {
+    headers: { Authorization: `Bearer ${await token()}` },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (res.status === 401) cached = undefined;
+  if (!res.ok) throw new Error(`PayPal payout lookup: ${res.status}`);
+  const json = await res.json();
+  const item = ITEM_STATUS[json.items?.[0]?.transaction_status];
+  if (json.batch_header?.batch_status === "DENIED" && (!item || item === "pending")) return "denied";
+  if (!item) throw new Error(`PayPal payout lookup: no item status for ${batchId}`);
+  return item;
 }
 
 export type PayoutEvent =

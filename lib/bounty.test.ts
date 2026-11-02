@@ -10,7 +10,8 @@ process.env.ANTHROPIC_API_KEY = "test-key";
 process.env.PAYPAL_CLIENT_ID = "id";
 process.env.PAYPAL_CLIENT_SECRET = "secret";
 
-const { approve, bountyId, decide, ingest, insertClaim, listBounties, move, recordPayoutStatus, reject } = await import(
+const { approve, bountyId, checkPendingPayouts, decide, ingest, insertClaim, listBounties, move, recordPayoutStatus, reject } =
+  await import(
   "./bounty.ts"
 );
 const { parseBountyLabel, parseIssueRef, parseMergeWebhook, parsePayee, sign } = await import("./github.ts");
@@ -145,6 +146,7 @@ describe("flow against fake Claude and PayPal", () => {
   let claudeSays: (prompt: string) => object | "refuse" | "throw";
   let batches: Map<string, string>;
   let comments: string[];
+  const lookups = new Map<string, () => Response>();
 
   globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -178,6 +180,8 @@ describe("flow against fake Claude and PayPal", () => {
       batches.set(sid, `BATCH${batches.size + 1}`);
       return json(201, { batch_header: { payout_batch_id: batches.get(sid), batch_status: "PENDING" } });
     }
+    const lookup = /\/v1\/payments\/payouts\/([^/?#]+)$/.exec(url);
+    if (lookup) return lookups.get(lookup[1])?.() ?? json(404, { name: "RESOURCE_NOT_FOUND" });
     throw new Error(`unexpected fetch ${url}`);
   };
   const log = console.log;
@@ -271,5 +275,31 @@ describe("flow against fake Claude and PayPal", () => {
     claudeSays = () => ({ ...verdict("pay", 0.95), reasoning: "x".repeat(2000) });
     await ingest(pr(16, 4));
     assert.equal(row(id).state, "sent");
+  });
+
+  const sentRow = (issue: number, batchId: string) => {
+    const id = bountyId("bountypay/lookup", issue);
+    insertClaim(claim({ id, repo: "bountypay/lookup", issue }));
+    move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
+    move(id, "payoutSent", { payoutBatchId: batchId });
+    return id;
+  };
+
+  test("a payout PayPal later fails shows as failed without a webhook", async () => {
+    const id = sentRow(1, "B-denied");
+    lookups.set("B-denied", () =>
+      Response.json({ batch_header: { batch_status: "DENIED" }, items: [{ transaction_status: "FAILED" }] }),
+    );
+    await checkPendingPayouts();
+    const b = row(id);
+    assert.equal(b.state === "sent" && b.payoutStatus, "failed");
+  });
+
+  test("a failed PayPal lookup leaves the payout pending", async () => {
+    const id = sentRow(2, "B-down");
+    lookups.set("B-down", () => new Response("upstream down", { status: 503 }));
+    await checkPendingPayouts();
+    const b = row(id);
+    assert.equal(b.state === "sent" && b.payoutStatus, "pending");
   });
 });
