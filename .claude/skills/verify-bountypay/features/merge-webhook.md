@@ -27,7 +27,7 @@ Preconditions:
 - **Read the verdicts.** Wait 5 s without keys or 60 s with them, then `node .claude/skills/verify-bountypay/scripts/state.mjs "$RUN_DIR" --out "$RUN_DIR/evidence/merge.json"`. Rows exist for `#1`, `#2`, `#3` and none for `#4`.
   - Without an Anthropic key, all three rows are `held` / `judge_failed`.
   - With keys, `#3` is `held` / `over_cap` whatever Claude says ($250 > $100). `#1` is expected to reach `sent` with a `payout_batch_id`, and `#2` to be `held`, but both depend on Claude's real verdict. Record the actual reason and confidence.
-- **Comments.** Run `grep '\[demo comment\]' "$RUN_DIR/server.log"`. One "waiting for maintainer review" line per held row, and one "sent $50.00 through PayPal" line if `#1` paid.
+- **Comments.** Run `grep '\[demo comment\]' "$RUN_DIR/server.log"`. One "waiting for maintainer review" line per held row, and one "PayPal accepted a $50.00 payout" line if `#1` paid.
 - **Proof.** Run `node .claude/skills/verify-bountypay/scripts/ui.mjs "$RUN_DIR" snapshot merge`. The grid shows the same states and reasons as `merge.json`.
 
 ## Gotchas

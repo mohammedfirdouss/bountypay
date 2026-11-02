@@ -191,7 +191,7 @@ async function resumePayout(id: BountyId): Promise<Bounty> {
       done.repo,
       done.pr,
       done.state === "sent"
-        ? `BountyPay: sent ${usd(done.amount)} through PayPal (payout batch ${done.payoutBatchId}). Thank you!`
+        ? `BountyPay: PayPal accepted a ${usd(done.amount)} payout for this PR (payout batch ${done.payoutBatchId}). Thank you!`
         : "BountyPay: PayPal declined the payout. A maintainer will follow up.",
     );
   }
