@@ -1,7 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { comment, fetchBountyIssue, fetchDiff, type MergedPr } from "./github.ts";
 import { judge, Verdict } from "./judge.ts";
-import { sendPayout, type PayoutStatus } from "./paypal.ts";
+import { fetchPayoutStatus, sendPayout, type PayoutStatus } from "./paypal.ts";
 
 export type BountyId = string & { readonly __brand: "BountyId" };
 export type Cents = number & { readonly __brand: "Cents" };
@@ -127,6 +127,36 @@ export function recordPayoutStatus(batchId: string, status: PayoutStatus, at: st
        WHERE excluded.at >= payout_status.at`,
     )
     .run(batchId, status, at);
+}
+
+const LOOKUP_EVERY_MS = 30_000;
+const lastLookup = new Map<string, number>();
+
+/**
+ * Asks PayPal about sent payouts that no webhook has settled, at most once per batch every 30 s, and
+ * records the answer as if the webhook had sent it. Never throws: a failed lookup leaves the row pending.
+ */
+export async function checkPendingPayouts(): Promise<void> {
+  const now = Date.now();
+  const due = db()
+    .prepare(
+      `SELECT DISTINCT payout_batch_id AS id FROM (SELECT payout_batch_id, ${PAYPAL_STATUS} FROM bounties WHERE state = 'sent')
+       WHERE paypal_status IS NULL OR paypal_status = 'pending'`,
+    )
+    .all()
+    .map((r) => r.id as string)
+    .filter((id) => now - (lastLookup.get(id) ?? 0) >= LOOKUP_EVERY_MS);
+  await Promise.all(
+    due.map(async (id) => {
+      lastLookup.set(id, now);
+      try {
+        const status = await fetchPayoutStatus(id);
+        if (status !== "pending") recordPayoutStatus(id, status, new Date().toISOString());
+      } catch (e) {
+        console.error(`payout lookup failed for ${id}:`, e);
+      }
+    }),
+  );
 }
 
 const MAINTAINER_MOVES = (Object.keys(MOVES) as Move[]).filter(
