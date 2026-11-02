@@ -100,7 +100,7 @@ describe("store", () => {
     move(id, "verdictHold", { verdict: null, reason: "judge_failed" });
     assert.deepEqual(row(id).actions, ["approve", "reject"]);
     move(id, "approve", { approvedBy: "maintainer" });
-    move(id, "payoutSent", { payoutBatchId: "B1", payoutStatus: "pending" });
+    move(id, "payoutSent", { payoutBatchId: "B1" });
     assert.deepEqual(row(id).actions, []);
   });
   test("a rejected bounty reopens for another PR, not for a redelivery of the rejected one", () => {
@@ -116,11 +116,28 @@ describe("store", () => {
     const id = bountyId("s/status", 1);
     insertClaim(claim({ id }));
     move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
-    move(id, "payoutSent", { payoutBatchId: "B-status", payoutStatus: "pending" });
+    move(id, "payoutSent", { payoutBatchId: "B-status" });
     recordPayoutStatus("B-status", "succeeded", "2026-11-02T10:00:02Z");
     recordPayoutStatus("B-status", "unclaimed", "2026-11-02T10:00:01Z");
     const b = row(id);
     assert.equal(b.state === "sent" && b.payoutStatus, "succeeded");
+  });
+  test("a PayPal status that arrives before the row is sent is kept", () => {
+    const id = bountyId("s/early", 1);
+    insertClaim(claim({ id }));
+    move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
+    recordPayoutStatus("B-early", "unclaimed", "2026-11-02T10:00:01Z");
+    move(id, "payoutSent", { payoutBatchId: "B-early" });
+    const b = row(id);
+    assert.equal(b.state === "sent" && b.payoutStatus, "unclaimed");
+  });
+  test("a sent row with no PayPal status yet reads as pending", () => {
+    const id = bountyId("s/pending", 1);
+    insertClaim(claim({ id }));
+    move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
+    move(id, "payoutSent", { payoutBatchId: "B-pending" });
+    const b = row(id);
+    assert.equal(b.state === "sent" && b.payoutStatus, "pending");
   });
 });
 

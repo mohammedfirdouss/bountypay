@@ -5,7 +5,7 @@ After a payout is sent, PayPal reports what happened to the money (succeeded, un
 ## Sub-features
 
 - `status-verify` rejects an event PayPal does not verify, with 400.
-- `status-record` updates PayPal status for the row with that payout batch id, ignoring older events.
+- `status-record` stores the newest status per payout batch id, ignoring older events. A row in `sent` shows the status for its batch id, or `pending` before any event, so an event that arrives before the row reaches `sent` is not lost.
 
 ## How to get to it (user POV)
 

@@ -43,7 +43,7 @@ const MOVES = {
 type Move = keyof typeof MOVES;
 type MaintainerMove = { [M in Move]: (typeof MOVES)[M]["by"] extends "maintainer" ? M : never }[Move];
 
-type Patch<S extends State> = Omit<Extract<Bounty, { state: S }>, keyof Claim | "state" | "updatedAt">;
+type Patch<S extends State> = Omit<Extract<Bounty, { state: S }>, keyof Claim | "state" | "updatedAt" | "payoutStatus">;
 
 export type Row = Bounty & { actions: MaintainerMove[] };
 
@@ -120,10 +120,11 @@ export async function reject(id: string): Promise<Bounty> {
 export function recordPayoutStatus(batchId: string, status: PayoutStatus, at: string): void {
   db()
     .prepare(
-      `UPDATE bounties SET payout_status = ?, payout_status_at = ?
-       WHERE payout_batch_id = ? AND (payout_status_at IS NULL OR payout_status_at <= ?)`,
+      `INSERT INTO payout_status (batch_id, status, at) VALUES (?, ?, ?)
+       ON CONFLICT(batch_id) DO UPDATE SET status = excluded.status, at = excluded.at
+       WHERE excluded.at >= payout_status.at`,
     )
-    .run(status, at, batchId, at);
+    .run(batchId, status, at);
 }
 
 const MAINTAINER_MOVES = (Object.keys(MOVES) as Move[]).filter(
@@ -132,7 +133,7 @@ const MAINTAINER_MOVES = (Object.keys(MOVES) as Move[]).filter(
 
 export function listBounties(): Row[] {
   return db()
-    .prepare("SELECT * FROM bounties ORDER BY updated_at DESC")
+    .prepare(`SELECT *, ${PAYPAL_STATUS} FROM bounties ORDER BY updated_at DESC`)
     .all()
     .map(toBounty)
     .map((b) => ({
@@ -151,7 +152,7 @@ async function pay(id: BountyId): Promise<Bounty> {
     note: `Bounty for ${b.id}, PR #${b.pr}`,
   });
   const done = r.ok
-    ? move(id, "payoutSent", { payoutBatchId: r.batchId, payoutStatus: "pending" })
+    ? move(id, "payoutSent", { payoutBatchId: r.batchId })
     : move(id, "payoutError", { error: r.error });
   if (done) {
     await comment(
@@ -169,12 +170,13 @@ function heldNotice(b: Bounty & { state: "held" }): string {
   return `BountyPay: this ${usd(b.amount)} bounty is waiting for maintainer review (${b.reason.replaceAll("_", " ")}).`;
 }
 
+const PAYPAL_STATUS = "(SELECT status FROM payout_status WHERE batch_id = bounties.payout_batch_id) AS paypal_status";
+
 const COLUMNS: Record<string, string> = {
   verdict: "verdict",
   reason: "reason",
   approvedBy: "approved_by",
   payoutBatchId: "payout_batch_id",
-  payoutStatus: "payout_status",
   error: "error",
 };
 
@@ -196,7 +198,7 @@ export function move<M extends Move>(
   }
   const row = db()
     .prepare(
-      `UPDATE bounties SET ${sets.join(", ")} WHERE id = ? AND state IN (${from.map(() => "?").join(", ")}) RETURNING *`,
+      `UPDATE bounties SET ${sets.join(", ")} WHERE id = ? AND state IN (${from.map(() => "?").join(", ")}) RETURNING *, ${PAYPAL_STATUS}`,
     )
     .get(...values, id, ...from);
   return row ? (toBounty(row) as Extract<Bounty, { state: (typeof MOVES)[M]["to"] }>) : null;
@@ -227,7 +229,7 @@ function firstNotice(repo: string, pr: number, kind: "no_payee" | "claimed"): bo
 }
 
 function load(id: string): Bounty | undefined {
-  const row = db().prepare("SELECT * FROM bounties WHERE id = ?").get(id);
+  const row = db().prepare(`SELECT *, ${PAYPAL_STATUS} FROM bounties WHERE id = ?`).get(id);
   return row ? toBounty(row) : undefined;
 }
 
@@ -259,7 +261,7 @@ function toBounty(row: Record<string, SQLInputValue>): Bounty {
         verdict,
         approvedBy,
         payoutBatchId: row.payout_batch_id as string,
-        payoutStatus: row.payout_status as PayoutStatus,
+        payoutStatus: (row.paypal_status as PayoutStatus | null) ?? "pending",
       };
     case "failed":
       return { ...claim, state, verdict, approvedBy, error: row.error as string };
@@ -288,8 +290,6 @@ function db(): DatabaseSync {
       reason TEXT,
       approved_by TEXT,
       payout_batch_id TEXT,
-      payout_status TEXT,
-      payout_status_at TEXT,
       error TEXT,
       updated_at TEXT NOT NULL
     );
@@ -298,6 +298,11 @@ function db(): DatabaseSync {
       pr INTEGER NOT NULL,
       kind TEXT NOT NULL,
       PRIMARY KEY (repo, pr, kind)
+    );
+    CREATE TABLE IF NOT EXISTS payout_status (
+      batch_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      at TEXT NOT NULL
     )`);
   return handle;
 }

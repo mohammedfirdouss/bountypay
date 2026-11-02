@@ -9,7 +9,9 @@ if (!runDir) throw new Error("usage: node state.mjs RUN_DIR [--out FILE]");
 const db = new DatabaseSync(`${runDir}/bountypay.db`, { readOnly: true });
 const rows = db
   .prepare(
-    "SELECT id, pr, payee, amount, state, reason, approved_by, payout_batch_id, payout_status, error, verdict FROM bounties ORDER BY id",
+    `SELECT b.id, b.pr, b.payee, b.amount, b.state, b.reason, b.approved_by, b.payout_batch_id,
+       CASE WHEN b.state = 'sent' THEN COALESCE(s.status, 'pending') END AS payout_status, b.error, b.verdict
+     FROM bounties b LEFT JOIN payout_status s ON s.batch_id = b.payout_batch_id ORDER BY b.id`,
   )
   .all();
 const json = JSON.stringify(rows, null, 2);
