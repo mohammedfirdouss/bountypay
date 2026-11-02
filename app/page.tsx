@@ -1,69 +1,70 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import { refresh } from "next/cache";
+import { cookies } from "next/headers";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { approve, listBounties, POLICY, reject } from "@/lib/bounty.ts";
+import { BountyGrid } from "./BountyGrid.tsx";
 
-export default function Home() {
+const COOKIE = "bountypay_token";
+
+async function authorized(): Promise<boolean> {
+  const token = process.env.DASHBOARD_TOKEN;
+  return !token || (await cookies()).get(COOKIE)?.value === token;
+}
+
+async function onApprove(id: string) {
+  "use server";
+  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
+  await approve(id);
+  refresh();
+}
+
+async function onReject(id: string) {
+  "use server";
+  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
+  await reject(id);
+  refresh();
+}
+
+async function unlock(form: FormData) {
+  "use server";
+  (await cookies()).set(COOKIE, String(form.get("token") ?? ""), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+  refresh();
+}
+
+export default function Page() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main>
+      <header>
+        <h1>BountyPay</h1>
+        <p>
+          Claude pays a merged bounty PR through PayPal when it is at least {POLICY.minConfidence * 100}% sure the diff
+          resolves the issue and the bounty is at most ${POLICY.cap / 100}. Everything else waits here for a maintainer.
+        </p>
+      </header>
+      <Suspense fallback={<p>Loading bounties…</p>}>
+        <Dashboard />
+      </Suspense>
+    </main>
+  );
+}
+
+async function Dashboard() {
+  await connection();
+  const canAct = await authorized();
+  return (
+    <>
+      {!canAct && (
+        <form action={unlock}>
+          <input name="token" type="password" placeholder="Dashboard token" aria-label="Dashboard token" />{" "}
+          <button type="submit">Unlock Approve and Reject</button>
+        </form>
+      )}
+      <BountyGrid rows={listBounties()} canAct={canAct} onApprove={onApprove} onReject={onReject} />
+    </>
   );
 }
