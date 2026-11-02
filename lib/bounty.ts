@@ -100,14 +100,14 @@ export async function ingest(merge: MergedPr): Promise<void> {
     }
     move(id, "verdictPay", { verdict, approvedBy: "claude" });
   }
-  await pay(id);
+  await resumePayout(id);
 }
 
 export async function approve(id: string): Promise<Bounty> {
   const b = load(id);
   if (!b) throw new Error(`unknown bounty ${id}`);
   if (!move(b.id, "approve", { approvedBy: "maintainer" })) return load(id)!;
-  return pay(b.id);
+  return resumePayout(b.id);
 }
 
 export async function reject(id: string): Promise<Bounty> {
@@ -143,7 +143,7 @@ export function listBounties(): Row[] {
     }));
 }
 
-async function pay(id: BountyId): Promise<Bounty> {
+async function resumePayout(id: BountyId): Promise<Bounty> {
   const b = load(id)!;
   if (b.state !== "paying") return b;
   const r = await sendPayout({
