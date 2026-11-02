@@ -53,8 +53,8 @@ export type Decision = { next: "pay" } | { next: "hold"; reason: HoldReason };
 
 export const POLICY: Policy = { minConfidence: 0.8, cap: 100_00 as Cents };
 
-export function decide(claim: Claim, verdict: Verdict | null, policy: Policy = POLICY): Decision {
-  if (!verdict) return { next: "hold", reason: "refused" };
+export function decide(claim: Claim, verdict: Verdict | "refused", policy: Policy = POLICY): Decision {
+  if (verdict === "refused") return { next: "hold", reason: "refused" };
   if (verdict.decision === "hold") return { next: "hold", reason: "judged_unresolved" };
   if (verdict.confidence < policy.minConfidence) return { next: "hold", reason: "low_confidence" };
   if (claim.amount > policy.cap) return { next: "hold", reason: "over_cap" };
@@ -83,7 +83,7 @@ export async function ingest(merge: MergedPr): Promise<void> {
   }
 
   if (stored.state === "judging") {
-    let verdict: Verdict | null;
+    let verdict: Verdict | "refused";
     try {
       verdict = await judge({ issue, pr: merge, diff: await fetchDiff(merge.repo, merge.pr) });
     } catch (e) {
@@ -93,12 +93,13 @@ export async function ingest(merge: MergedPr): Promise<void> {
       return;
     }
     const d = decide(stored, verdict);
+    const kept = verdict === "refused" ? null : verdict;
     if (d.next === "hold") {
-      const held = move(id, "verdictHold", { verdict, reason: d.reason });
+      const held = move(id, "verdictHold", { verdict: kept, reason: d.reason });
       if (held) await comment(held.repo, held.pr, heldNotice(held));
       return;
     }
-    move(id, "verdictPay", { verdict, approvedBy: "claude" });
+    move(id, "verdictPay", { verdict: kept, approvedBy: "claude" });
   }
   await resumePayout(id);
 }

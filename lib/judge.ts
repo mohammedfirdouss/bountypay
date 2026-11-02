@@ -25,7 +25,7 @@ export async function judge(input: {
   issue: { title: string; body: string };
   pr: { title: string; body: string };
   diff: string;
-}): Promise<Verdict | null> {
+}): Promise<Verdict | "refused"> {
   client ??= new Anthropic();
   const diff =
     input.diff.length > MAX_DIFF_CHARS ? input.diff.slice(0, MAX_DIFF_CHARS) + "\n[truncated]" : input.diff;
@@ -43,6 +43,7 @@ export async function judge(input: {
     ],
     output_config: { effort: "medium", format: betaZodOutputFormat(Verdict) },
   });
-  if (response.stop_reason === "refusal") return null;
-  return response.parsed_output ?? null;
+  if (response.stop_reason === "refusal") return "refused";
+  if (!response.parsed_output) throw new Error(`no verdict (stop_reason ${response.stop_reason})`);
+  return response.parsed_output;
 }

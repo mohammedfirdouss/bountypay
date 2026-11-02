@@ -42,7 +42,7 @@ describe("decide", () => {
     assert.deepEqual(decide(claim(), verdict("hold", 0.95)), { next: "hold", reason: "judged_unresolved" });
   });
   test("a refusal is held", () => {
-    assert.deepEqual(decide(claim(), null), { next: "hold", reason: "refused" });
+    assert.deepEqual(decide(claim(), "refused"), { next: "hold", reason: "refused" });
   });
 });
 
