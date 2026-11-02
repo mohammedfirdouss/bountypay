@@ -20,7 +20,7 @@ body {
 }
 
 main {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 24px 16px;
   display: flex;
@@ -158,10 +158,26 @@ main > * {
 
 .badge-failed,
 .badge-pp-failed,
+.badge-pp-denied,
 .badge-pp-blocked,
 .badge-pp-returned {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.ag-cell.reasoning {
+  display: flex;
+  align-items: center;
+  line-height: 1.35;
+}
+
+.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
 }
 
 .confidence {
