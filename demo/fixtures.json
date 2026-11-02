@@ -26,13 +26,13 @@
     {
       "number": 10,
       "title": "Fall back to defaults when the config file is empty",
-      "body": "Fixes #1\n\nAn empty file parses to null, so merge it with the defaults instead.\n\nPayPal: sb-fx2ju53547833@personal.example.com",
+      "body": "Fixes #1\n\nAn empty file parses to null, so merge it with the defaults instead.\n\nPayPal: sb-8wdhx53622314@personal.example.com",
       "diff": "diff --git a/src/config.ts b/src/config.ts\nindex 3f1c2aa..8d0e4b1 100644\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -8,8 +8,9 @@ const DEFAULTS: Config = { targets: [\"all\"], outDir: \"dist\" };\n \n export function loadConfig(path: string): Config {\n   const text = readFileSync(path, \"utf8\");\n-  const parsed = JSON.parse(text) as Config;\n-  return { ...DEFAULTS, ...parsed, targets: parsed.targets };\n+  const parsed = text.trim() === \"\" ? null : (JSON.parse(text) as Partial<Config> | null);\n+  if (!parsed) return { ...DEFAULTS };\n+  return { ...DEFAULTS, ...parsed, targets: parsed.targets ?? DEFAULTS.targets };\n }\ndiff --git a/src/config.test.ts b/src/config.test.ts\nindex 51aa0c2..c2b7f19 100644\n--- a/src/config.test.ts\n+++ b/src/config.test.ts\n@@ -20,3 +20,9 @@ test(\"reads targets\", () => {\n   assert.deepEqual(loadConfig(fixture(\"targets.json\")).targets, [\"web\"]);\n });\n+\n+test(\"an empty file falls back to the defaults\", () => {\n+  writeFileSync(tmp, \"\");\n+  assert.deepEqual(loadConfig(tmp), { targets: [\"all\"], outDir: \"dist\" });\n+});\n"
     },
     {
       "number": 11,
       "title": "Tidy the HTTP client docs",
-      "body": "Fixes #2\n\nPayPal: sb-fx2ju53547833@personal.example.com",
+      "body": "Fixes #2\n\nPayPal: sb-8wdhx53622314@personal.example.com",
       "diff": "diff --git a/src/http.ts b/src/http.ts\nindex 0b7d9e1..44c2f80 100644\n--- a/src/http.ts\n+++ b/src/http.ts\n@@ -1,6 +1,6 @@\n /**\n- * Fetchs JSON from a URL.\n+ * Fetches JSON from a URL.\n  */\n export async function fetchJson(url: string): Promise<unknown> {\n   const res = await fetch(url);\n   if (!res.ok) throw new Error(`HTTP ${res.status}`);\n"
     },
     {
