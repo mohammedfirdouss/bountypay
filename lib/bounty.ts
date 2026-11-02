@@ -71,13 +71,13 @@ export async function ingest(merge: MergedPr): Promise<void> {
   const issue = await fetchBountyIssue(merge.repo, merge.issue);
   if (!issue) return;
   if (!merge.payee) {
-    await comment(merge.repo, merge.pr, "BountyPay: this PR closes a bounty issue but has no `PayPal: you@example.com` line, so no payout was started. Add the line and ask a maintainer to redeliver the merge webhook.");
+    if (firstNotice(merge.repo, merge.pr, "no_payee")) await comment(merge.repo, merge.pr, "BountyPay: this PR closes a bounty issue but has no `PayPal: you@example.com` line, so no payout was started. Add the line and ask a maintainer to redeliver the merge webhook.");
     return;
   }
   const id = bountyId(merge.repo, merge.issue);
   const stored = insertClaim({ ...merge, id, amount: issue.amount, payee: merge.payee });
   if (stored.pr !== merge.pr) {
-    await comment(merge.repo, merge.pr, `BountyPay: the bounty on #${merge.issue} is already claimed by #${stored.pr}.`);
+    if (firstNotice(merge.repo, merge.pr, "claimed")) await comment(merge.repo, merge.pr, `BountyPay: the bounty on #${merge.issue} is already claimed by #${stored.pr}.`);
     return;
   }
 
@@ -221,6 +221,11 @@ export function insertClaim(c: Claim): Bounty {
   return load(c.id)!;
 }
 
+function firstNotice(repo: string, pr: number, kind: "no_payee" | "claimed"): boolean {
+  const r = db().prepare("INSERT INTO notices (repo, pr, kind) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").run(repo, pr, kind);
+  return r.changes > 0;
+}
+
 function load(id: string): Bounty | undefined {
   const row = db().prepare("SELECT * FROM bounties WHERE id = ?").get(id);
   return row ? toBounty(row) : undefined;
@@ -287,6 +292,12 @@ function db(): DatabaseSync {
       payout_status_at TEXT,
       error TEXT,
       updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS notices (
+      repo TEXT NOT NULL,
+      pr INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      PRIMARY KEY (repo, pr, kind)
     )`);
   return handle;
 }

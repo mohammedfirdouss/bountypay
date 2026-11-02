@@ -202,6 +202,16 @@ describe("flow against fake Claude and PayPal", () => {
     assert.equal(batches.size, 0);
   });
 
+  test("redeliveries post the already-claimed and missing-PayPal-line comments once", async () => {
+    for (let i = 0; i < 3; i++) {
+      await ingest(pr(17, 1));
+      await ingest(pr(21, 1, null));
+    }
+    assert.equal(comments.filter((c) => c.includes("already claimed by #10")).length, 1);
+    assert.equal(comments.filter((c) => c.includes("no `PayPal:")).length, 1);
+    assert.equal(comments.length, 2);
+  });
+
   test("over the cap is held for review, then a double-clicked approve pays once", async () => {
     await ingest(pr(12, 3));
     const held = row("bountypay/demo#3");
