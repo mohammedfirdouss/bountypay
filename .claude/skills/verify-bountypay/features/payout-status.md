@@ -6,6 +6,7 @@ After a payout is sent, PayPal reports what happened to the money (succeeded, un
 
 - `status-verify` rejects an event PayPal does not verify, with 400.
 - `status-record` stores the newest status per payout batch id, ignoring older events. A row in `sent` shows the status for its batch id, or `pending` before any event, so an event that arrives before the row reaches `sent` is not lost.
+- `status-lookup` covers runs with no webhook. Each dashboard load asks PayPal (`GET /v1/payments/payouts/{batch}`) about `sent` rows still `pending`, at most once per batch every 30 s, and records the item status through the same path. A failed lookup leaves the row `pending`.
 
 ## How to get to it (user POV)
 
@@ -25,6 +26,6 @@ Preconditions:
 
 ## Gotchas
 
-- A local run with no tunnel never receives PayPal events, so `pending` there is expected, not a failure.
+- A local run with no tunnel never receives PayPal events, but the dashboard lookup still settles the status within one or two loads. With the current sandbox sender, PayPal denies the batch and the row shows `failed`.
 - Sandbox payouts to addresses without a sandbox account end up `unclaimed`. Use a sandbox personal account email as the payee to see `succeeded`.
 - A forged event cannot be replayed locally to fake this, because verification calls PayPal. Do not stub it.
