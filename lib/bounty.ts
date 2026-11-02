@@ -206,7 +206,7 @@ export function move<M extends Move>(
   id: BountyId,
   m: M,
   patch: Partial<Patch<(typeof MOVES)[M]["to"]>>,
-): Bounty | null {
+): Extract<Bounty, { state: (typeof MOVES)[M]["to"] }> | null {
   const { from, to } = MOVES[m];
   const sets = ["state = ?", "updated_at = ?"];
   const values: SQLInputValue[] = [to, new Date().toISOString()];
@@ -219,7 +219,7 @@ export function move<M extends Move>(
       `UPDATE bounties SET ${sets.join(", ")} WHERE id = ? AND state IN (${from.map(() => "?").join(", ")}) RETURNING *`,
     )
     .get(...values, id, ...from);
-  return row ? toBounty(row) : null;
+  return row ? (toBounty(row) as Extract<Bounty, { state: (typeof MOVES)[M]["to"] }>) : null;
 }
 
 /**
