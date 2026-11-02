@@ -72,6 +72,10 @@ To use Postman instead of the script, import `bountypay.postman_collection.json`
 
 Every PayPal developer account comes with a sandbox business account (the sender, already funded) and a sandbox personal account (a receiver) under **Testing Tools > Sandbox Accounts**. Payouts to the fixtures' `@example.com` addresses are created but stay unclaimed. To watch a payout complete, put your sandbox personal account's email in a fixture's `PayPal:` line, then log in to [sandbox.paypal.com](https://www.sandbox.paypal.com) with it to see the money arrive. Sandbox money is not real.
 
+### Why the sandbox merchant is in the UK
+
+BountyPay was built in Nigeria. PayPal denied every payout sent from a Nigeria-registered sandbox business account, even a verified one holding USD 5,000. PayPal doesn't offer business accounts or Payouts to Nigerian businesses, so the demo merchant and payee are UK sandbox accounts. Contributors in markets PayPal serves receive their bounties normally. Reaching contributors in send-only markets like Nigeria is the next problem BountyPay wants to solve.
+
 ## License
 
 MIT
