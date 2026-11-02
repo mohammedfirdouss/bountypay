@@ -4,12 +4,10 @@ import { judge, Verdict } from "./judge.ts";
 import { sendPayout, type PayoutStatus } from "./paypal.ts";
 
 export type BountyId = string & { readonly __brand: "BountyId" };
-/** Integer USD cents, never floats. */
 export type Cents = number & { readonly __brand: "Cents" };
 export type Email = string & { readonly __brand: "Email" };
 export type { PayoutStatus };
 
-/** Facts fixed when a merged PR claims the bounty. Never rewritten for the life of the claim. */
 export type Claim = {
   id: BountyId;
   repo: string;
@@ -24,10 +22,6 @@ type Approver = "claude" | "maintainer";
 
 export type HoldReason = "judged_unresolved" | "low_confidence" | "over_cap" | "refused" | "judge_failed";
 
-/**
- * The lifecycle. Each state carries exactly the fields that exist in it.
- * BountyPay's decision ends at `sent`; PayPal's later word on the money is `payoutStatus`, written only by its webhook.
- */
 export type Bounty = Claim & { updatedAt: string } & (
     | { state: "judging" }
     | { state: "held"; verdict: Verdict | null; reason: HoldReason }
@@ -38,11 +32,6 @@ export type Bounty = Claim & { updatedAt: string } & (
   );
 export type State = Bounty["state"];
 
-/**
- * Every legal transition, keyed by the event that causes it and the actor allowed to cause it.
- * move() derives its SQL guard from `from`, and listBounties() derives each row's dashboard buttons from it.
- * Claiming (no row, or `rejected` by another PR, -> `judging`) lives in insertClaim because it is an upsert.
- */
 const MOVES = {
   verdictPay: { by: "claude", from: ["judging"], to: "paying" },
   verdictHold: { by: "claude", from: ["judging"], to: "held" },
@@ -54,7 +43,6 @@ const MOVES = {
 type Move = keyof typeof MOVES;
 type MaintainerMove = { [M in Move]: (typeof MOVES)[M]["by"] extends "maintainer" ? M : never }[Move];
 
-/** Fields the target state adds. Fields not given keep their stored value. */
 type Patch<S extends State> = Omit<Extract<Bounty, { state: S }>, keyof Claim | "state" | "updatedAt">;
 
 export type Row = Bounty & { actions: MaintainerMove[] };
@@ -62,10 +50,8 @@ export type Row = Bounty & { actions: MaintainerMove[] };
 export type Policy = { minConfidence: number; cap: Cents };
 export type Decision = { next: "pay" } | { next: "hold"; reason: HoldReason };
 
-/** The mandate Claude acts under. Constants, so the rule in the repo is the rule that runs. */
 export const POLICY: Policy = { minConfidence: 0.8, cap: 100_00 as Cents };
 
-/** The money decision. Pure. Claude can only narrow it: a null verdict (refusal) or any doubt holds. */
 export function decide(claim: Claim, verdict: Verdict | null, policy: Policy = POLICY): Decision {
   if (!verdict) return { next: "hold", reason: "refused" };
   if (verdict.decision === "hold") return { next: "hold", reason: "judged_unresolved" };
@@ -113,11 +99,9 @@ export async function ingest(merge: MergedPr): Promise<void> {
     }
     move(id, "verdictPay", { verdict, approvedBy: "claude" });
   }
-  // Also resumes a `paying` row left by a crash or a lost PayPal response.
   await pay(id);
 }
 
-/** Maintainer path. Pays a held, failed, or stuck-judging bounty through the same pay() as the webhook. */
 export async function approve(id: string): Promise<Bounty> {
   const b = load(id);
   if (!b) throw new Error(`unknown bounty ${id}`);
@@ -125,7 +109,6 @@ export async function approve(id: string): Promise<Bounty> {
   return pay(b.id);
 }
 
-/** Maintainer path. A rejected bounty reopens: the next merged PR that claims the issue starts a fresh claim. */
 export async function reject(id: string): Promise<Bounty> {
   const b = load(id);
   if (!b) throw new Error(`unknown bounty ${id}`);
@@ -134,7 +117,6 @@ export async function reject(id: string): Promise<Bounty> {
   return done ?? load(id)!;
 }
 
-/** PayPal webhook path. Writes only payout_status, never `state`, and ignores events older than the stored one. */
 export function recordPayoutStatus(batchId: string, status: PayoutStatus, at: string): void {
   db()
     .prepare(
@@ -148,7 +130,6 @@ const MAINTAINER_MOVES = (Object.keys(MOVES) as Move[]).filter(
   (m): m is MaintainerMove => MOVES[m].by === "maintainer",
 );
 
-/** Dashboard read, newest first. */
 export function listBounties(): Row[] {
   return db()
     .prepare("SELECT * FROM bounties ORDER BY updated_at DESC")
@@ -160,7 +141,6 @@ export function listBounties(): Row[] {
     }));
 }
 
-/** The one payout path. A row that is not `paying` is returned untouched. */
 async function pay(id: BountyId): Promise<Bounty> {
   const b = load(id)!;
   if (b.state !== "paying") return b;
@@ -199,7 +179,7 @@ const COLUMNS: Record<string, string> = {
 };
 
 /**
- * Atomic compare-and-swap, and the only function that changes `state`.
+ * Atomic compare-and-swap.
  * Returns the updated row when this caller won, null when another actor moved it first.
  */
 export function move<M extends Move>(
@@ -246,7 +226,6 @@ function load(id: string): Bounty | undefined {
   return row ? toBounty(row) : undefined;
 }
 
-/** Storage boundary: row columns to the union, verdict JSON through the zod schema. */
 function toBounty(row: Record<string, SQLInputValue>): Bounty {
   const claim = {
     id: row.id as BountyId,

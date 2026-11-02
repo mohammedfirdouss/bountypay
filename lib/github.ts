@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Cents, Email } from "./bounty.ts";
 
-/** A merged PR that names an issue. `payee` is null when the body has no `PayPal:` line. */
 export type MergedPr = {
   repo: string;
   pr: number;
@@ -33,19 +32,16 @@ function fixture(): Fixtures {
   return fixtures;
 }
 
-/** `Fixes #12`, `closes #3`, `Resolved #7`: the GitHub closing keywords, any case. */
 export function parseIssueRef(body: string): number | null {
   const m = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/i.exec(body);
   return m ? Number(m[1]) : null;
 }
 
-/** A `PayPal: someone@example.com` line. */
 export function parsePayee(body: string): Email | null {
   const m = /^\s*paypal:\s*([^\s@]+@[^\s@]+\.[^\s@]+)\s*$/im.exec(body);
   return m ? (m[1] as Email) : null;
 }
 
-/** The first `bounty:50` or `bounty:12.50` label, in cents. */
 export function parseBountyLabel(labels: readonly string[]): Cents | null {
   for (const label of labels) {
     const m = /^bounty:(\d{1,6})(?:\.(\d{1,2}))?$/i.exec(label.trim());
@@ -99,7 +95,6 @@ async function api(route: string, init: RequestInit = {}): Promise<Response> {
   return res;
 }
 
-/** The issue if it carries a `bounty:<usd>` label. */
 export async function fetchBountyIssue(
   repo: string,
   issue: number,

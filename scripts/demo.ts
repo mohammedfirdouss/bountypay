@@ -1,6 +1,3 @@
-// Posts every demo/fixtures.json PR as a signed, merged pull_request webhook, then replays the first.
-//   node scripts/demo.ts [--url http://localhost:3000]
-//   node scripts/demo.ts --postman   writes bountypay.postman_collection.json from the same fixtures
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { sign, type Fixtures } from "../lib/github.ts";
@@ -87,7 +84,6 @@ if (values.postman) {
       body: d.raw,
     });
     console.log(`${res.status} ${d.name} -> ${await res.text()}`);
-    // Lets each claim land before the next delivery, so the double claim finds PR #10 already holding issue #1.
     await new Promise((r) => setTimeout(r, 1500));
   }
   console.log(`\nClaude is judging in the background. Watch ${values.url} fill in.`);

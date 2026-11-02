@@ -2,7 +2,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 
-/** Claude's output contract and the stored verdict shape. One schema, so the type is derived, not hand-synced. */
 export const Verdict = z.object({
   decision: z.enum(["pay", "hold"]),
   confidence: z.number().min(0).max(1),
@@ -22,7 +21,6 @@ confidence is your probability (0 to 1) that the diff resolves the issue. reason
 
 let client: Anthropic | undefined;
 
-/** One structured call. Returns null when Claude refuses or the output does not parse, so the bounty fails closed. API errors throw. */
 export async function judge(input: {
   issue: { title: string; body: string };
   pr: { title: string; body: string };

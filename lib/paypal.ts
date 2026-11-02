@@ -3,7 +3,6 @@ import type { Cents, Email } from "./bounty.ts";
 
 const BASE = "https://api-m.sandbox.paypal.com";
 
-/** PayPal's own fact about the payout item: "pending" until its first PAYMENT.PAYOUTS-ITEM.* event. */
 export const PAYOUT_STATUSES = [
   "pending",
   "succeeded",
@@ -35,7 +34,6 @@ async function token(): Promise<string> {
   return cached.token;
 }
 
-/** Derived from the claim, so a retry of the same claim can never create a second batch. */
 export function senderBatchId(claimKey: string): string {
   return "bp_" + createHash("sha256").update(claimKey).digest("hex").slice(0, 24);
 }
@@ -85,7 +83,6 @@ export async function sendPayout(p: {
 
 export type PayoutEvent = { kind: "status"; batchId: string; status: PayoutStatus; at: string } | { kind: "ignored" };
 
-/** Verifies through PayPal, then maps PAYMENT.PAYOUTS-ITEM.* to a status. null for a bad signature. */
 export async function parsePayoutWebhook(raw: string, headers: Headers): Promise<PayoutEvent | null> {
   const h = (name: string) => JSON.stringify(headers.get(name) ?? "");
   // Splice the raw body in rather than re-serializing it: PayPal checks the event bytes it sent.
