@@ -11,6 +11,7 @@ const { values } = parseArgs({
 });
 const fixtures: Fixtures = JSON.parse(readFileSync("demo/fixtures.json", "utf8"));
 const DEFAULT_SECRET = "bountypay-demo-secret";
+const LET_PR10_CLAIM_LAND_BEFORE_PR13_MS = 1500;
 
 const deliveries = [
   ...fixtures.prs.map((pr) => ({ name: `PR #${pr.number}: ${pr.title}`, pr })),
@@ -84,7 +85,7 @@ if (values.postman) {
       body: d.raw,
     });
     console.log(`${res.status} ${d.name} -> ${await res.text()}`);
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, LET_PR10_CLAIM_LAND_BEFORE_PR13_MS));
   }
   console.log(`\nClaude is judging in the background. Watch ${values.url} fill in.`);
 }

@@ -42,7 +42,9 @@ Open http://localhost:3000. Within a minute you should see:
 | PR #14 has no `PayPal:` line | no row: comment asking for it |
 | Replay of PR #10 | no change, still one payout |
 
-Approve a held row to pay it through the same path. To use Postman instead of the script, import `bountypay.postman_collection.json` and send the requests in order. Its pre-request script signs each body with the `webhookSecret` variable.
+Approve a held row to pay it through the same path. `npm run demo -- --url https://<host>` posts the same deliveries to another server, such as a deploy.
+
+To use Postman instead of the script, import `bountypay.postman_collection.json` and send the requests in order. Its pre-request script signs each body with the `webhookSecret` variable. After editing `demo/fixtures.json`, regenerate the collection with `node scripts/demo.ts --postman`.
 
 `npm test` runs the policy, parser, store, and payout-flow tests with fake Claude and PayPal responses.
 
