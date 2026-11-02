@@ -33,6 +33,7 @@ export type Bounty = Claim & { updatedAt: string } & (
 export type State = Bounty["state"];
 
 const MOVES = {
+  claim: { by: "github", from: ["rejected"], to: "judging" },
   verdictPay: { by: "claude", from: ["judging"], to: "paying" },
   verdictHold: { by: "claude", from: ["judging"], to: "held" },
   approve: { by: "maintainer", from: ["judging", "held", "failed"], to: "paying" },
@@ -212,14 +213,14 @@ export function insertClaim(c: Claim): Bounty {
   db()
     .prepare(
       `INSERT INTO bounties (id, repo, issue, pr, pr_url, amount, payee, state, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'judging', ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          pr = excluded.pr, pr_url = excluded.pr_url, amount = excluded.amount, payee = excluded.payee,
-         state = 'judging', verdict = NULL, reason = NULL, approved_by = NULL, error = NULL,
+         state = excluded.state, verdict = NULL, reason = NULL, approved_by = NULL, error = NULL,
          updated_at = excluded.updated_at
-       WHERE bounties.state = 'rejected' AND bounties.pr != excluded.pr`,
+       WHERE bounties.state IN (${MOVES.claim.from.map(() => "?").join(", ")}) AND bounties.pr != excluded.pr`,
     )
-    .run(c.id, c.repo, c.issue, c.pr, c.prUrl, c.amount, c.payee, new Date().toISOString());
+    .run(c.id, c.repo, c.issue, c.pr, c.prUrl, c.amount, c.payee, MOVES.claim.to, new Date().toISOString(), ...MOVES.claim.from);
   return load(c.id)!;
 }
 
