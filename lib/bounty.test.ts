@@ -237,4 +237,12 @@ describe("flow against fake Claude and PayPal", () => {
     assert.equal(b.state === "held" && b.reason, "judge_failed");
     assert.equal(batches.size, 0);
   });
+
+  test("a verdict with long reasoning still pays", async () => {
+    const id = bountyId("bountypay/demo", 4);
+    await reject(id);
+    claudeSays = () => ({ ...verdict("pay", 0.95), reasoning: "x".repeat(2000) });
+    await ingest(pr(16, 4));
+    assert.equal(row(id).state, "sent");
+  });
 });

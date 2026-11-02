@@ -5,7 +5,7 @@ import { z } from "zod";
 export const Verdict = z.object({
   decision: z.enum(["pay", "hold"]),
   confidence: z.number().min(0).max(1),
-  reasoning: z.string().max(600),
+  reasoning: z.string(),
 });
 export type Verdict = z.infer<typeof Verdict>;
 
