@@ -4,10 +4,10 @@ Open-source maintainers put bounties on issues, then check PRs and send money by
 
 ## For judges
 
-- **Live demo:** LIVE_URL. It runs on Render's free tier, so the first load after idle takes about 50 seconds.
+- **Live demo:** https://bountypay.onrender.com. It runs on Render's free tier, so the first load after idle takes about 50 seconds.
 - **Dashboard token:** in the Devpost testing instructions. You need it to use Approve and Reject.
 - **Try it:**
-  1. If the dashboard is empty, run `npm run demo -- --url LIVE_URL` from a clone. It posts six signed GitHub merge webhooks.
+  1. If the dashboard is empty, run `npm run demo -- --url https://bountypay.onrender.com` from a clone. It posts six signed GitHub merge webhooks.
   2. Within a minute, Claude judges each PR. PR #10 is paid automatically, and its PayPal status turns `succeeded`. PR #11 (typo-only) and PR #12 (over the cap) are held.
   3. Unlock with the token and approve PR #11. Search, filter by state, or export CSV.
 - **Real:** Claude (`claude-opus-5-5`) and PayPal sandbox Payouts.
