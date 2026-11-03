@@ -17,6 +17,7 @@ const {
   clearBounties,
   decide,
   ingest,
+  ingestComment,
   insertClaim,
   listBounties,
   move,
@@ -24,7 +25,7 @@ const {
   reject,
 } = await import("./bounty.ts");
 const { ensureDemoSeeded, runDemo } = await import("./demo.ts");
-const { parseBountyLabel, parseIssueRef, parseMergeWebhook, parsePayee, sign } = await import("./github.ts");
+const { parseBountyLabel, parseIssueRef, parsePayee, parseWebhook, sign } = await import("./github.ts");
 
 const claim = (over: Partial<Claim> = {}): Claim => ({
   id: bountyId("o/r", 1),
@@ -96,7 +97,7 @@ describe("parse helpers", () => {
       pull_request: { merged: true, number, html_url: "u", title: "t", body },
     });
   const signed = (raw: string, secret = "test-secret", event = "pull_request") =>
-    parseMergeWebhook(raw, new Headers({ "x-hub-signature-256": sign(raw, secret), "x-github-event": event }));
+    parseWebhook(raw, new Headers({ "x-hub-signature-256": sign(raw, secret), "x-github-event": event }));
   const PR10 = "Fixes #1\nPayPal: sb-8wdhx53622314@personal.example.com";
 
   test("the merge webhook needs a valid signature", () => {
@@ -422,10 +423,10 @@ describe("flow against fake Claude and PayPal", () => {
     const second = runDemo();
     release();
     await second;
-    assert.equal(calls, 4, "PRs #10, #11, #12 and #15 are judged once each");
-    assert.deepEqual(listBounties().map((b) => b.id).sort(), [1, 2, 3, 5].map((i) => `bountypay/demo#${i}`));
+    assert.equal(calls, 5, "PRs #10, #11, #12, #14 (after its PayPal comment) and #15 are judged once each");
+    assert.deepEqual(listBounties().map((b) => b.id).sort(), [1, 2, 3, 4, 5].map((i) => `bountypay/demo#${i}`));
     ensureDemoSeeded();
-    assert.equal(listBounties().length, 4, "a seeded store is left alone");
+    assert.equal(listBounties().length, 5, "a seeded store is left alone");
   });
 
   test("a reset claim reuses its PayPal batch, but a different payee never inherits it", async () => {
@@ -446,4 +447,60 @@ describe("flow against fake Claude and PayPal", () => {
     assert.notEqual(batch(), first);
     assert.equal(batches.size, 2);
   });
+
+  const deliver = async (event: string, payload: object) => {
+    const raw = JSON.stringify(payload);
+    const r = parseWebhook(raw, new Headers({ "x-hub-signature-256": sign(raw, "test-secret"), "x-github-event": event }));
+    if (r.kind === "merged") await ingest(r.pr);
+    if (r.kind === "payee_comment") await ingestComment(r.pr);
+    return r;
+  };
+  const PR14 = { number: 14, title: "Document --dry-run", body: "Fixes #4" };
+  const repository = { full_name: "bountypay/demo" };
+  const mergeOf14 = {
+    action: "closed",
+    repository,
+    pull_request: { ...PR14, merged: true, html_url: "https://github.com/bountypay/demo/pull/14", user: { login: "author" } },
+  };
+  const commentOn14 = (login: string, body = "Thanks!\n\nPayPal: sb-8wdhx53622314@personal.example.com") => ({
+    action: "created",
+    repository,
+    issue: {
+      ...PR14,
+      user: { login: "author" },
+      pull_request: { html_url: "https://github.com/bountypay/demo/pull/14", merged_at: "2026-11-01T12:00:00Z" },
+    },
+    comment: { body, user: { login } },
+  });
+
+  test("the PR author's PayPal comment claims a bounty its merge could not, once", async () => {
+    clearBounties();
+    comments = [];
+    await deliver("pull_request", mergeOf14);
+    assert.equal(listBounties().length, 0);
+    assert.match(comments[0], /the PR author can comment `PayPal: you@example\.com` on this PR/);
+
+    const stranger = await deliver("issue_comment", commentOn14("drive-by"));
+    assert.deepEqual(stranger, { kind: "ignored", reason: "comment is not from the PR author" });
+    assert.equal(listBounties().length, 0);
+
+    for (let i = 0; i < 3; i++) await deliver("issue_comment", commentOn14("author"));
+    const b = row(bountyId("bountypay/demo", 4));
+    assert.equal(b.state, "sent");
+    assert.equal(b.pr, 14);
+    assert.equal(b.payee, "sb-8wdhx53622314@personal.example.com");
+    assert.equal(batches.size, 1, "one payout despite redeliveries");
+    assert.equal(comments.filter((c) => c.includes("PayPal accepted a $20 payout")).length, 1);
+  });
+
+  test("a PayPal comment opens no claim for a PR that has one, or whose merge BountyPay never saw", async () => {
+    clearBounties();
+    await ingest(pr(10, 1));
+    await ingestComment({ ...pr(10, 1), payee: "eve@example.com" as Email });
+    assert.equal(row(bountyId("bountypay/demo", 1)).payee, "p10@example.com");
+    await ingestComment(pr(14, 4));
+    assert.equal(listBounties().length, 1);
+    assert.equal(batches.size, 1);
+  });
+
 });

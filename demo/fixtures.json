@@ -61,7 +61,8 @@
       "title": "Document --dry-run",
       "body": "Fixes #4",
       "diff": "diff --git a/README.md b/README.md\nindex 1111111..2222222 100644\n--- a/README.md\n+++ b/README.md\n@@ -12,3 +12,5 @@ tool build\n+\n+`--dry-run` prints what would be built without writing files.\n",
-      "offline": {"decision": "pay", "confidence": 0.92, "reasoning": "The README now documents --dry-run and says what it does, which is all the issue asks for."}
+      "offline": {"decision": "pay", "confidence": 0.92, "reasoning": "The README now documents --dry-run and says what it does, which is all the issue asks for."},
+      "comments": ["Thanks for merging!\n\nPayPal: sb-8wdhx53622314@personal.example.com"]
     },
     {
       "number": 15,

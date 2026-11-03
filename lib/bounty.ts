@@ -99,7 +99,7 @@ export async function ingest(merge: MergedPr): Promise<void> {
   const issue = await fetchBountyIssue(merge.repo, merge.issue);
   if (!issue) return;
   if (!merge.payee) {
-    if (firstNotice(merge.repo, merge.pr, "no_payee")) await comment(merge.repo, merge.pr, "BountyPay: this PR closes a bounty issue but has no `PayPal: you@example.com` line, so no payout was started. Add the line and ask a maintainer to redeliver the merge webhook.");
+    if (firstNotice(merge.repo, merge.pr, "no_payee")) await comment(merge.repo, merge.pr, "BountyPay: this PR closes a bounty issue but has no `PayPal: you@example.com` line, so no payout was started. To claim the bounty, the PR author can comment `PayPal: you@example.com` on this PR.");
     return;
   }
   const id = bountyId(merge.repo, merge.issue);
@@ -133,6 +133,15 @@ export async function ingest(merge: MergedPr): Promise<void> {
     }
   }
   await resumePayout(id);
+}
+
+/**
+ * Comment path: the PR author's `PayPal:` comment claims the bounty as a merge naming that payee would,
+ * but only for a merged bounty PR that was told it had no PayPal line.
+ */
+export async function ingestComment(merge: MergedPr): Promise<void> {
+  if (!hadNotice(merge.repo, merge.pr, "no_payee")) return;
+  await ingest(merge);
 }
 
 /** Bounties this process is asking Claude about, so a concurrent delivery does not ask again. */
@@ -310,9 +319,15 @@ export function clearBounties(): void {
   db().exec("DELETE FROM bounties; DELETE FROM notices; DELETE FROM payout_status;");
 }
 
-function firstNotice(repo: string, pr: number, kind: "no_payee" | "claimed"): boolean {
+type NoticeKind = "no_payee" | "claimed";
+
+function firstNotice(repo: string, pr: number, kind: NoticeKind): boolean {
   const r = db().prepare("INSERT INTO notices (repo, pr, kind) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").run(repo, pr, kind);
   return r.changes > 0;
+}
+
+function hadNotice(repo: string, pr: number, kind: NoticeKind): boolean {
+  return db().prepare("SELECT 1 FROM notices WHERE repo = ? AND pr = ? AND kind = ?").get(repo, pr, kind) !== undefined;
 }
 
 function load(id: string): Bounty | undefined {
