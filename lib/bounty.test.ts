@@ -59,9 +59,14 @@ describe("parse helpers", () => {
     assert.equal(parsePayee("paypal:  bob@example.co.uk"), "bob@example.co.uk");
     assert.equal(parsePayee("PayPal: not-an-email"), null);
     assert.equal(parsePayee("Pay me at ada@example.com"), null);
+    assert.equal(parsePayee("PayPal: <ada@example.com>"), "ada@example.com");
+    assert.equal(parsePayee("PayPal: `ada@example.com`"), "ada@example.com");
+    assert.equal(parsePayee("PayPal: ada@mail.example.co.uk."), "ada@mail.example.co.uk");
   });
   test("bounty labels parse to cents", () => {
     assert.equal(parseBountyLabel(["bug", "bounty:50"]), 50_00);
+    assert.equal(parseBountyLabel(["bounty:$50"]), 50_00);
+    assert.equal(parseBountyLabel(["bounty: 50"]), 50_00);
     assert.equal(parseBountyLabel(["bounty:12.5"]), 12_50);
     assert.equal(parseBountyLabel(["bounty:abc", "bug"]), null);
   });

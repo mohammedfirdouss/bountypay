@@ -38,13 +38,13 @@ export function parseIssueRef(body: string): number | null {
 }
 
 export function parsePayee(body: string): Email | null {
-  const m = /^\s*paypal:\s*([^\s@]+@[^\s@]+\.[^\s@]+)\s*$/im.exec(body);
+  const m = /^\s*paypal:\s*[<`]?([^\s@<>`]+@[^\s@<>`]+\.[^\s@<>`.]+)[>`]?\.?\s*$/im.exec(body);
   return m ? (m[1] as Email) : null;
 }
 
 export function parseBountyLabel(labels: readonly string[]): Cents | null {
   for (const label of labels) {
-    const m = /^bounty:(\d{1,6})(?:\.(\d{1,2}))?$/i.exec(label.trim());
+    const m = /^bounty:\s*\$?(\d{1,6})(?:\.(\d{1,2}))?$/i.exec(label.trim());
     if (m) return (Number(m[1]) * 100 + Number((m[2] ?? "0").padEnd(2, "0"))) as Cents;
   }
   return null;
