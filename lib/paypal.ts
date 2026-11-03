@@ -75,8 +75,13 @@ export async function sendPayout(p: {
   if (res.status === 401 || res.status === 429 || res.status >= 500) throw new Error(`PayPal payouts: ${res.status}`);
   const json = await res.json();
   if (res.ok) return { ok: true, batchId: json.batch_header.payout_batch_id };
-  const original = (json.links ?? [])
-    .map((l: { href?: string }) => /\/v1\/payments\/payouts\/([^/?#]+)/.exec(l.href ?? "")?.[1])
+  // PayPal puts the duplicate-batch link in details[].link, not the top-level links.
+  const links: { href?: string }[] = [
+    ...(json.links ?? []),
+    ...(json.details ?? []).flatMap((d: { link?: { href?: string }[] }) => d.link ?? []),
+  ];
+  const original = links
+    .map((l) => /\/v1\/payments\/payouts\/([^/?#]+)/.exec(l.href ?? "")?.[1])
     .find(Boolean);
   if (original) return { ok: true, batchId: original };
   return { ok: false, error: [json.name, json.message].filter(Boolean).join(": ") || `HTTP ${res.status}` };
