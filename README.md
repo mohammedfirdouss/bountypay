@@ -8,7 +8,7 @@ Open-source maintainers put bounties on issues, then check PRs and send money by
 - **Dashboard token:** in the Devpost testing instructions. You need it to use Approve and Reject.
 - **Try it:**
   1. Open the dashboard. In demo mode an empty dashboard refills itself from the fixtures, through the real Claude and PayPal path. You can also run `npm run demo -- --url https://bountypay.onrender.com` from a clone.
-  2. Within a minute, Claude judges each PR. PR #10 is paid automatically, and its PayPal status turns `succeeded`. PR #11 (typo-only), PR #12 (over the cap) and PR #15 (a prompt-injection attempt) are held, each with Claude's reasoning.
+  2. Within a minute, Claude judges each PR. PR #10 is paid automatically, and its PayPal status turns `succeeded`. PR #11 (typo-only), PR #12 (over the cap) and PR #15 (a prompt-injection attempt) are held, each with Claude's reasoning. PR #14 was merged without a PayPal line, so it claims its bounty when its author comments one.
   3. Unlock with the token and approve PR #11. Search, filter by state, or export CSV.
 - **Real:** Claude (`claude-opus-5-5`) and PayPal sandbox Payouts.
 - **Simulated:** GitHub issues and diffs come from `demo/fixtures.json`.
@@ -33,15 +33,17 @@ flowchart LR
 
 ## Run locally
 
-Needs Node 24, a [PayPal sandbox app](https://developer.paypal.com/dashboard/applications/sandbox) with Payouts enabled, and an [Anthropic API key](https://console.anthropic.com/).
+Needs Node 24. The offline mode needs no keys: Claude's verdicts come from `demo/fixtures.json`, and a built-in stand-in accepts every payout as `OFFLINE-…` and reports it succeeded.
 
 ```sh
-cp .env.example .env.local   # set ANTHROPIC_API_KEY, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET
+cp .env.example .env.local           # the demo webhook secret; no keys needed offline
 npm install
-npm run dev                  # http://localhost:3000
-npm run demo                 # second terminal: posts the demo webhooks
-npm test                     # fake Claude and PayPal, no keys needed
+BOUNTYPAY_DEMO=offline npm run dev   # http://localhost:3000
+npm run demo                         # second terminal: posts the demo webhooks
+npm test                             # fake Claude and PayPal, no keys needed
 ```
+
+To use the real Claude and PayPal sandbox, set `ANTHROPIC_API_KEY`, `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` in `.env.local` from a [PayPal sandbox app](https://developer.paypal.com/dashboard/applications/sandbox) with Payouts enabled and an [Anthropic API key](https://console.anthropic.com/), then run `npm run dev` and `npm run demo`.
 
 | Demo PR | Expected |
 | --- | --- |
@@ -49,19 +51,21 @@ npm test                     # fake Claude and PayPal, no keys needed
 | #11 only fixes a typo ($40) | held for review |
 | #12 fixes issue #3 ($250) | held, over cap |
 | #13 also claims issue #1 | "already claimed" comment |
-| #14 has no `PayPal:` line | comment asking for one |
+| #14 has no `PayPal:` line ($20) | comment asking for one, then the author comments the line and it is judged like a merge |
 | #15 tells Claude to approve itself ($15) | held: the injection is ignored |
 | Replay of #10 | no second payout |
 
+- Held comments end with a `cc @demo-maintainer` line. In demo mode every PR comment is printed in the server log instead of posted.
 - `npm run demo -- --url <host>` targets a deploy.
 - `bountypay.postman_collection.json` sends the same signed requests from Postman. Regenerate it with `node scripts/demo.ts --postman`.
 
 ## Use on a real repo
 
 1. Deploy with Render (**New > Blueprint** on this repo uses `render.yaml`). Set `BOUNTYPAY_DEMO=0` and `GITHUB_TOKEN`.
-2. Add a repo webhook to `https://<host>/api/github`: content type JSON, secret `GITHUB_WEBHOOK_SECRET`, **Pull requests** event.
-3. Label an issue `bounty:50`. Contributors write `Fixes #<n>` and `PayPal: <email>` in the PR description.
-4. Optional: add a PayPal app webhook to `https://<host>/api/paypal` for the `PAYMENT.PAYOUTS-ITEM.*` events, and set `PAYPAL_WEBHOOK_ID`.
+2. Add a repo webhook to `https://<host>/api/github`: content type JSON, secret `GITHUB_WEBHOOK_SECRET`, **Pull requests** and **Issue comments** events.
+3. Label an issue `bounty:50`. Contributors write `Fixes #<n>` and `PayPal: <email>` in the PR description. A contributor who forgot the PayPal line can comment it on the merged PR. Only the PR author's comment counts.
+4. Held bounties mention the maintainers in their PR comment. Set `BOUNTYPAY_MAINTAINERS`, or BountyPay uses the owners on the `*` line of the repo's CODEOWNERS.
+5. Optional: add a PayPal app webhook to `https://<host>/api/paypal` for the `PAYMENT.PAYOUTS-ITEM.*` events, and set `PAYPAL_WEBHOOK_ID`.
 
 ## Environment
 
@@ -71,8 +75,9 @@ npm test                     # fake Claude and PayPal, no keys needed
 | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | PayPal sandbox app that sends payouts |
 | `PAYPAL_WEBHOOK_ID` | Verifies PayPal webhooks |
 | `GITHUB_WEBHOOK_SECRET` | Verifies GitHub webhooks |
-| `GITHUB_TOKEN` | Reads issues and diffs, posts comments (not used in demo mode) |
-| `BOUNTYPAY_DEMO` | `1` uses `demo/fixtures.json` and logs comments |
+| `GITHUB_TOKEN` | Reads issues, diffs and CODEOWNERS, posts comments (not used in demo mode) |
+| `BOUNTYPAY_DEMO` | `1` uses `demo/fixtures.json` and logs comments. `offline` also stands in for Claude and PayPal, so no keys are needed |
+| `BOUNTYPAY_MAINTAINERS` | GitHub handles to mention on held bounties, comma-separated. Defaults to CODEOWNERS, or the fixture list in demo mode |
 | `BOUNTYPAY_DB` | SQLite path, default `./bountypay.db` |
 | `DASHBOARD_TOKEN` | Required for Approve and Reject when set |
 
