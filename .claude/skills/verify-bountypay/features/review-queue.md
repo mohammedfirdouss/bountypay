@@ -28,6 +28,6 @@ Preconditions:
 
 ## Gotchas
 
-- `review-token` needs a server launched with a non-empty `DASHBOARD_TOKEN`. `launch.sh` clears it, so cover it in a separate run with `DASHBOARD_TOKEN=x` exported before launching, and edit nothing else.
+- `review-token` needs a server launched with a non-empty `DASHBOARD_TOKEN`. `launch.sh` passes through an exported value and defaults to empty, so cover it in a separate run with `DASHBOARD_TOKEN=x` exported before launching, and edit nothing else.
 - A `paying` row has no buttons. It resumes on the next webhook redelivery for that PR, not from the dashboard.
 - Rows are keyed by issue (`#3`), but comments go to the PR (`#12`). Grep the log by PR number.

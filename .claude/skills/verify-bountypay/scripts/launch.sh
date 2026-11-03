@@ -27,7 +27,7 @@ set -m  # job control: the server gets its own process group, so cleanup can sto
 BOUNTYPAY_DEMO=1 \
 BOUNTYPAY_DB="$RUN_DIR/bountypay.db" \
 GITHUB_WEBHOOK_SECRET="$SECRET" \
-DASHBOARD_TOKEN="" \
+DASHBOARD_TOKEN="${DASHBOARD_TOKEN:-}" \
   npx next dev -p "$PORT" >"$RUN_DIR/server.log" 2>&1 < /dev/null &
 echo $! > "$RUN_DIR/pid"
 

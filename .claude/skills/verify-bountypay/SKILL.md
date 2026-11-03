@@ -18,7 +18,7 @@ All scripts live in `.claude/skills/verify-bountypay/scripts/`. Run them from th
 RUN_DIR=$(.claude/skills/verify-bountypay/scripts/launch.sh)   # optional arg: a run id
 ```
 
-- Starts `next dev` on port 3100 (`BOUNTYPAY_VERIFY_PORT` overrides) with `BOUNTYPAY_DEMO=1`, a fresh SQLite file at `$RUN_DIR/bountypay.db`, an empty `DASHBOARD_TOKEN`, and `GITHUB_WEBHOOK_SECRET` (default `bountypay-demo-secret`, saved in `$RUN_DIR/secret`).
+- Starts `next dev` on port 3100 (`BOUNTYPAY_VERIFY_PORT` overrides) with `BOUNTYPAY_DEMO=1`, a fresh SQLite file at `$RUN_DIR/bountypay.db`, `DASHBOARD_TOKEN` empty unless you export one, and `GITHUB_WEBHOOK_SECRET` (default `bountypay-demo-secret`, saved in `$RUN_DIR/secret`).
 - Ready means the dashboard HTML contains `BountyPay`. The script prints `RUN_DIR` only after that. The table is created on the first request, so an empty run directory is a valid start.
 - Real keys in `.env.local` (`ANTHROPIC_API_KEY`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`) pass through, so the same launch exercises the real Claude and PayPal sandbox calls when they are present.
 - It refuses to start if the port is taken or another `next dev` holds this checkout's `.next/dev`. Next allows one dev server per checkout, so two runs cannot share a checkout. Never drive a server this run did not start, including the user's own `npm run dev` on port 3000.
