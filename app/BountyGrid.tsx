@@ -38,6 +38,9 @@ type GridContext = { demo: boolean };
 
 const REFRESH_MS = 3000;
 const NARROW = "(max-width: 720px)";
+/** Columns the detail panel repeats for its row. They make way while it is open, so the grid fits beside it. */
+const PANEL_SHOWS = ["payee", "approvedBy", "reasoning", "paypal"];
+const REASON_WIDTH = 140;
 
 const theme = themeQuartz.withParams({
   accentColor: "#047857",
@@ -165,7 +168,7 @@ function buildColumns(policy: Policy, narrow: boolean, open: (id: string) => voi
     {
       colId: "reason",
       headerName: "Held because",
-      width: 140,
+      width: REASON_WIDTH,
       hide: narrow,
       valueGetter: (p) => (p.data ? holdReasons(p.data).map((r) => holdReason(r, p.data!, policy).short).join(", ") : ""),
       tooltipValueGetter: (p) => (p.data ? holdReasons(p.data).map((r) => holdReason(r, p.data!, policy).long).join(" ") : ""),
@@ -346,6 +349,15 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
   const context = useMemo<GridContext>(() => ({ demo }), [demo]);
   const totals = useMemo(() => [{ id: `${shown.count} shown`, amount: shown.amount }], [shown]);
   const columns = useMemo(() => buildColumns(policy, narrow, open), [policy, narrow, open]);
+  const selected = selectedId ? rows.find((r) => r.id === selectedId) : undefined;
+  const beside = selected !== undefined && !narrow;
+
+  useEffect(() => {
+    const api = grid.current?.api;
+    if (!api || narrow) return;
+    api.setColumnsVisible(PANEL_SHOWS, !beside);
+    api.applyColumnState({ state: [{ colId: "reason", flex: beside ? 1 : null, width: REASON_WIDTH }] });
+  }, [beside, narrow, columns]);
 
   const onModelUpdated = useCallback(
     ({ api }: ModelUpdatedEvent<Row>) => {
@@ -377,7 +389,6 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
   const held = rows.filter((r) => r.state === "held");
   const states = Object.keys(STATES) as State[];
   const counts = Object.fromEntries(states.map((s) => [s, rows.filter((r) => r.state === s).length]));
-  const selected = selectedId ? rows.find((r) => r.id === selectedId) : undefined;
 
   return (
     <ReviewProvider value={review}>
