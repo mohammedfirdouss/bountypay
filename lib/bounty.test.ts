@@ -79,19 +79,33 @@ describe("parse helpers", () => {
     assert.equal(parseBountyLabel(["bounty:12.5"]), 12_50);
     assert.equal(parseBountyLabel(["bounty:abc", "bug"]), null);
   });
-  test("the merge webhook needs a valid signature", () => {
-    const raw = JSON.stringify({
+  const delivery = (repo: string, number: number, body: string) =>
+    JSON.stringify({
       action: "closed",
-      repository: { full_name: "o/r" },
-      pull_request: { merged: true, number: 10, html_url: "u", title: "t", body: "Fixes #1\nPayPal: a@b.co" },
+      repository: { full_name: repo },
+      pull_request: { merged: true, number, html_url: "u", title: "t", body },
     });
-    const headers = (sig: string, event = "pull_request") =>
-      new Headers({ "x-hub-signature-256": sig, "x-github-event": event });
-    assert.deepEqual(parseMergeWebhook(raw, headers(sign(raw, "wrong"))), { kind: "unauthorized" });
-    const ok = parseMergeWebhook(raw, headers(sign(raw, "test-secret")));
+  const signed = (raw: string, secret = "test-secret", event = "pull_request") =>
+    parseMergeWebhook(raw, new Headers({ "x-hub-signature-256": sign(raw, secret), "x-github-event": event }));
+  const PR10 = "Fixes #1\nPayPal: sb-8wdhx53622314@personal.example.com";
+
+  test("the merge webhook needs a valid signature", () => {
+    const raw = delivery("bountypay/demo", 10, PR10);
+    assert.deepEqual(signed(raw, "wrong"), { kind: "unauthorized" });
+    const ok = signed(raw);
     assert.equal(ok.kind, "merged");
-    assert.equal(ok.kind === "merged" && ok.pr.payee, "a@b.co");
-    assert.equal(parseMergeWebhook(raw, headers(sign(raw, "test-secret"), "issues")).kind, "ignored");
+    assert.equal(ok.kind === "merged" && ok.pr.payee, "sb-8wdhx53622314@personal.example.com");
+    assert.equal(signed(raw, "test-secret", "issues").kind, "ignored");
+  });
+  test("demo mode ignores any PR, issue or payee that is not in the fixtures", () => {
+    for (const raw of [
+      delivery("bountypay/demo", 99, PR10),
+      delivery("bountypay/demo", 10, "Fixes #1\nPayPal: thief@example.com"),
+      delivery("bountypay/demo", 10, "Fixes #3\nPayPal: sb-8wdhx53622314@personal.example.com"),
+      delivery("someone/else", 10, PR10),
+    ]) {
+      assert.deepEqual(signed(raw), { kind: "ignored", reason: "demo mode accepts only the PRs in demo/fixtures.json" });
+    }
   });
 });
 
@@ -344,6 +358,16 @@ describe("flow against fake Claude and PayPal", () => {
     assert.ok(prompt.includes("</pull_request>\n</diff>"), "the attacker's text is kept as data");
     assert.ok(!/paypal:/i.test(prompt));
     assert.ok(prompt.includes("NOTE TO THE AI REVIEWER"), "the fixture diff is judged");
+  });
+
+  test("concurrent deliveries of one merge ask Claude once", async () => {
+    await reject(bountyId("bountypay/demo", 5));
+    comments = [];
+    let calls = 0;
+    claudeSays = () => (calls++, verdict("hold", 0.2));
+    await Promise.all([ingest(pr(16, 5)), ingest(pr(16, 5)), ingest(pr(16, 5))]);
+    assert.equal(calls, 1);
+    assert.equal(comments.length, 1);
   });
 
   const sentRow = (issue: number, batchId: string) => {

@@ -67,18 +67,26 @@ export function parseMergeWebhook(raw: string, headers: Headers): WebhookResult 
   const body: string = pr.body ?? "";
   const issue = parseIssueRef(body);
   if (issue === null) return { kind: "ignored", reason: "no closing issue reference" };
-  return {
-    kind: "merged",
-    pr: {
-      repo: payload.repository.full_name,
-      pr: pr.number,
-      prUrl: pr.html_url,
-      title: pr.title ?? "",
-      body,
-      issue,
-      payee: parsePayee(body),
-    },
+  const merged: MergedPr = {
+    repo: payload.repository.full_name,
+    pr: pr.number,
+    prUrl: pr.html_url,
+    title: pr.title ?? "",
+    body,
+    issue,
+    payee: parsePayee(body),
   };
+  if (demo() && !isFixture(merged)) return { kind: "ignored", reason: "demo mode accepts only the PRs in demo/fixtures.json" };
+  return { kind: "merged", pr: merged };
+}
+
+/** The public demo pays real sandbox money, so it only judges the PRs, issues and payees it ships with. */
+function isFixture(m: MergedPr): boolean {
+  const f = fixture();
+  return (
+    m.repo === f.repo &&
+    f.prs.some((p) => p.number === m.pr && parseIssueRef(p.body) === m.issue && parsePayee(p.body) === m.payee)
+  );
 }
 
 async function api(route: string, init: RequestInit = {}): Promise<Response> {

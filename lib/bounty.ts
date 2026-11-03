@@ -110,24 +110,33 @@ export async function ingest(merge: MergedPr): Promise<void> {
   }
 
   if (stored.state === "judging") {
-    let judgment: Judgment;
+    if (judging.has(id)) return;
+    judging.add(id);
     try {
-      judgment = await judge({ issue, pr: merge, diff: await fetchDiff(merge.repo, merge.pr) });
-    } catch (e) {
-      console.error(`judge failed for ${id}:`, e);
-      judgment = "failed";
+      let judgment: Judgment;
+      try {
+        judgment = await judge({ issue, pr: merge, diff: await fetchDiff(merge.repo, merge.pr) });
+      } catch (e) {
+        console.error(`judge failed for ${id}:`, e);
+        judgment = "failed";
+      }
+      const d = decide(stored, judgment);
+      const kept = typeof judgment === "object" ? judgment : null;
+      if (d.next === "hold") {
+        const held = move(id, "verdictHold", { verdict: kept, reasons: d.reasons });
+        if (held) await comment(held.repo, held.pr, notice(held));
+        return;
+      }
+      move(id, "verdictPay", { verdict: kept, approvedBy: "claude" });
+    } finally {
+      judging.delete(id);
     }
-    const d = decide(stored, judgment);
-    const kept = typeof judgment === "object" ? judgment : null;
-    if (d.next === "hold") {
-      const held = move(id, "verdictHold", { verdict: kept, reasons: d.reasons });
-      if (held) await comment(held.repo, held.pr, notice(held));
-      return;
-    }
-    move(id, "verdictPay", { verdict: kept, approvedBy: "claude" });
   }
   await resumePayout(id);
 }
+
+/** Bounties this process is asking Claude about, so a concurrent delivery does not ask again. */
+const judging = new Set<BountyId>();
 
 export async function approve(id: string): Promise<Bounty> {
   const b = load(id);
