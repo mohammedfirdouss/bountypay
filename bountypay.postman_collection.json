@@ -123,7 +123,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\"action\":\"closed\",\"number\":12,\"pull_request\":{\"number\":12,\"merged\":true,\"title\":\"Parse logs line by line from a stream\",\"body\":\"Closes #3\\n\\nUses readline over a file stream so memory stays flat.\\n\\nPayPal: cy@example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/12\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
+          "raw": "{\"action\":\"closed\",\"number\":12,\"pull_request\":{\"number\":12,\"merged\":true,\"title\":\"Parse logs line by line from a stream\",\"body\":\"Closes #3\\n\\nUses readline over a file stream so memory stays flat.\\n\\nPayPal: sb-8wdhx53622314@personal.example.com\",\"html_url\":\"https://github.com/bountypay/demo/pull/12\",\"user\":{\"login\":\"demo-contributor\"}},\"repository\":{\"full_name\":\"bountypay/demo\"}}",
           "options": {
             "raw": {
               "language": "json"
