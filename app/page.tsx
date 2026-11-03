@@ -1,9 +1,12 @@
 import { refresh } from "next/cache";
 import { cookies } from "next/headers";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { Suspense } from "react";
 import { approve, checkPendingPayouts, listBounties, POLICY, reject } from "@/lib/bounty.ts";
+import { ensureDemoSeeded, runDemo } from "@/lib/demo.ts";
+import { mode } from "@/lib/mode.ts";
 import { BountyGrid } from "./BountyGrid.tsx";
+import type { Outcome } from "./Review.tsx";
 
 const COOKIE = "bountypay_token";
 
@@ -12,18 +15,42 @@ async function authorized(): Promise<boolean> {
   return !token || (await cookies()).get(COOKIE)?.value === token;
 }
 
-async function onApprove(id: string) {
+const OK: Outcome = { ok: true };
+const LOCKED: Outcome = { ok: false, message: "Enter the dashboard token first." };
+const GONE: Outcome = { ok: false, message: "This bounty no longer exists. A demo replay may have cleared it." };
+
+const exists = (id: string) => listBounties().some((r) => r.id === id);
+
+async function onApprove(id: string): Promise<Outcome> {
   "use server";
-  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
-  await approve(id);
   refresh();
+  if (!(await authorized())) return LOCKED;
+  if (!exists(id)) return GONE;
+  const b = await approve(id);
+  if (b.state === "failed") return { ok: false, message: `PayPal did not take the payout (${b.error}). Approve again to retry; it never pays twice.` };
+  if (b.state === "rejected") return { ok: false, message: "A maintainer already rejected it." };
+  return OK;
 }
 
-async function onReject(id: string) {
+async function onReject(id: string): Promise<Outcome> {
   "use server";
-  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
-  await reject(id);
   refresh();
+  if (!(await authorized())) return LOCKED;
+  if (!exists(id)) return GONE;
+  const b = await reject(id);
+  if (b.state === "sent") return { ok: false, message: "PayPal already accepted the payout, so it can no longer be rejected." };
+  return OK;
+}
+
+const demo = () => mode() !== "live";
+
+async function onRunDemo(): Promise<Outcome> {
+  "use server";
+  refresh();
+  if (!(await authorized())) return LOCKED;
+  if (!demo()) return { ok: false, message: "The demo only runs in demo or offline mode." };
+  after(() => runDemo().catch((e) => console.error("demo replay failed:", e)));
+  return OK;
 }
 
 async function unlock(form: FormData) {
@@ -43,14 +70,20 @@ export default function Page() {
     <main>
       <header className="masthead">
         <div className="brand">
-          <svg className="mark" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="9" fill="#0070e0" />
-            <circle cx="16" cy="16" r="9" fill="none" stroke="#fff" strokeWidth="2.2" opacity="0.45" />
-            <path d="M11.5 16.4l3.1 3.1 6-6.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg className="mark" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="16" fill="#064e3b" />
+            <path d="M8 44 Q32 10 56 44" stroke="#6ee7b7" strokeWidth="5" fill="none" strokeLinecap="round" />
+            <path d="M6 46h52" stroke="#6ee7b7" strokeWidth="4" strokeLinecap="round" />
+            <path d="M18 32v14M32 26v20M46 32v14" stroke="#6ee7b7" strokeWidth="2.5" strokeLinecap="round" opacity=".7" />
+            <circle cx="32" cy="22" r="7" fill="#fbbf24" />
+            <path d="M6 53c6 3 10 3 16 0s10-3 16 0 10 3 16 0" stroke="#34d399" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity=".6" />
           </svg>
           <div>
             <h1>
               BountyPay <span className="pill pill-sandbox">Sandbox</span>
+              <Suspense>
+                <OfflinePill />
+              </Suspense>
             </h1>
             <p className="tagline">Open-source bounties, paid through PayPal once Claude checks the merged PR.</p>
           </div>
@@ -80,6 +113,16 @@ export default function Page() {
         <Dashboard />
       </Suspense>
     </main>
+  );
+}
+
+async function OfflinePill() {
+  await connection();
+  if (mode() !== "offline") return null;
+  return (
+    <span className="pill pill-offline" title="Built-in stand-ins replace Claude and PayPal, so no keys are needed">
+      Offline
+    </span>
   );
 }
 
@@ -115,6 +158,17 @@ async function Access() {
 async function Dashboard() {
   await connection();
   const canAct = await authorized();
+  ensureDemoSeeded();
   await checkPendingPayouts();
-  return <BountyGrid rows={listBounties()} canAct={canAct} onApprove={onApprove} onReject={onReject} />;
+  return (
+    <BountyGrid
+      rows={listBounties()}
+      policy={POLICY}
+      canAct={canAct}
+      demo={demo()}
+      onApprove={onApprove}
+      onReject={onReject}
+      onRunDemo={onRunDemo}
+    />
+  );
 }

@@ -33,7 +33,7 @@ Preconditions:
   - In demo mode without an Anthropic key, `#1`, `#2`, `#4` and `#5` are `held` / `judge_failed`, and `#3` is `held` / `judge_failed,over_cap`.
   - With keys, `#3`'s reasons include `over_cap` whatever Claude says ($250 > $100), and `#5` is `held` (the injection failed). `#1` is expected to reach `sent` with a `payout_batch_id`, and `#2` to be `held`, but both depend on Claude's real verdict. Record the actual reasons and confidence.
 - **Comments.** Run `grep -A12 '\[demo comment\]' "$RUN_DIR/server.log"`. Comments span several lines. Each held row has one "is waiting for a maintainer because:" comment listing its reasons, quoting Claude's reasoning, and ending `cc @demo-maintainer`. If `#1` paid, it has one "PayPal accepted a $50 payout" comment.
-- **Proof.** Run `node .claude/skills/verify-bountypay/scripts/ui.mjs "$RUN_DIR" snapshot merge`. The grid shows the same states and reasons as `merge.json`.
+- **Proof.** Run `node .claude/skills/verify-bountypay/scripts/ui.mjs "$RUN_DIR" snapshot merge`. The grid shows the same states as `merge.json`, and its Held because column shows each stored reason in plain words (`over_cap` reads "Over the $100 limit").
 
 ## Gotchas
 
