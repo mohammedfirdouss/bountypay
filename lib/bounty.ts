@@ -1,5 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { comment, fetchBountyIssue, fetchDiff, type MergedPr } from "./github.ts";
+import { comment, fetchBountyIssue, fetchDiff, maintainers, type MergedPr } from "./github.ts";
 import { judge, Verdict } from "./judge.ts";
 import { fetchPayoutStatus, sendPayout, type PayoutResult, type PayoutStatus } from "./paypal.ts";
 
@@ -124,7 +124,7 @@ export async function ingest(merge: MergedPr): Promise<void> {
       const kept = typeof judgment === "object" ? judgment : null;
       if (d.next === "hold") {
         const held = move(id, "verdictHold", { verdict: kept, reasons: d.reasons });
-        if (held) await comment(held.repo, held.pr, notice(held));
+        if (held) await comment(held.repo, held.pr, notice(held) + mention(await maintainers(held.repo)));
         return;
       }
       move(id, "verdictPay", { verdict: kept, approvedBy: "claude" });
@@ -241,7 +241,7 @@ async function resumePayout(id: BountyId): Promise<Bounty> {
 
 /** The PR comment for a bounty that just reached a state the contributor should hear about. */
 function notice(b: Held | Extract<Bounty, { state: "sent" | "failed" | "rejected" }>): string {
-  const reasoning = b.verdict ? `\n\nClaude's reasoning:\n> ${b.verdict.reasoning.replaceAll("\n", "\n> ")}` : "";
+  const reasoning = b.verdict ? `\n\nClaude's reasoning:\n> ${unmention(b.verdict.reasoning).replaceAll("\n", "\n> ")}` : "";
   switch (b.state) {
     case "held":
       return `BountyPay: this ${usd(b.amount)} bounty is waiting for a maintainer because:\n${b.reasons.map((r) => `- ${HOLDS[r].says(b)}.`).join("\n")}${reasoning}\n\nA maintainer will approve or decline it from the BountyPay dashboard, and you will get another comment either way.`;
@@ -258,6 +258,11 @@ function notice(b: Held | Extract<Bounty, { state: "sent" | "failed" | "rejected
       return `BountyPay: a maintainer declined to pay the ${usd(b.amount)} bounty from this PR. If you think that is wrong, reply here and ask them to take another look. Another PR that resolves #${b.issue} can still claim it.`;
   }
 }
+
+const mention = (handles: string[]) => (handles.length ? `\n\ncc ${handles.map((h) => `@${h}`).join(" ")}` : "");
+
+/** Claude's reasoning can echo the PR, so a zero-width space after each `@` keeps it from pinging anyone. */
+const unmention = (text: string) => text.replaceAll("@", "@\u200b");
 
 const PAYPAL_STATUS = "(SELECT status FROM payout_status WHERE batch_id = bounties.payout_batch_id) AS paypal_status";
 

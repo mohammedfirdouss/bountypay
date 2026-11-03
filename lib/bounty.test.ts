@@ -196,6 +196,9 @@ describe("flow against fake Claude and PayPal", () => {
   let comments: string[];
   let paypalLosesNextResponse: boolean;
   const lookups = new Map<string, () => Response>();
+  let github: (route: string, init?: RequestInit) => Response = () => {
+    throw new Error("GitHub is not used in demo mode");
+  };
 
   globalThis.fetch = async (input, init) => {
     const url = String(input);
@@ -215,6 +218,7 @@ describe("flow against fake Claude and PayPal", () => {
         usage: { input_tokens: 1, output_tokens: 1 },
       });
     }
+    if (url.startsWith("https://api.github.com/")) return github(url.slice("https://api.github.com".length), init);
     if (url.endsWith("/v1/oauth2/token")) return json(200, { access_token: "t", expires_in: 3600 });
     if (url.endsWith("/v1/payments/payouts")) {
       const sid = JSON.parse(String(init?.body)).sender_batch_header.sender_batch_id;
@@ -503,4 +507,53 @@ describe("flow against fake Claude and PayPal", () => {
     assert.equal(batches.size, 1);
   });
 
+  const mentioned = (text: string) => [...text.matchAll(/(?<![\w`])@([a-z\d][\w/-]*)/gi)].map((m) => m[1]);
+  const heldComment = async (issue: number, prNumber: number) => {
+    clearBounties();
+    comments = [];
+    claudeSays = () => ({ ...verdict("hold", 0.2), reasoning: "Ping @mallory and @bountypay/admins, mail ada@example.com." });
+    await ingest(pr(prNumber, issue));
+    return comments.at(-1)!;
+  };
+
+  test("held comments mention the fixture maintainers, or BOUNTYPAY_MAINTAINERS when set, and nobody from Claude's reasoning", async () => {
+    let c = await heldComment(2, 11);
+    assert.deepEqual(mentioned(c), ["demo-maintainer"]);
+    assert.ok(c.endsWith("\n\ncc @demo-maintainer"));
+    assert.match(c, /Ping @\u200bmallory/, "the reasoning is still quoted");
+    process.env.BOUNTYPAY_MAINTAINERS = " ada, @grace,not a handle,org/reviewers";
+    try {
+      c = await heldComment(2, 11);
+    } finally {
+      delete process.env.BOUNTYPAY_MAINTAINERS;
+    }
+    assert.deepEqual(mentioned(c), ["ada", "grace", "org/reviewers"]);
+  });
+
+  test("on a real repo, held comments mention the CODEOWNERS default owners, or nobody without them", async () => {
+    let codeowners: string | null = "# owners\n* @old-owner\n*   @alice @org/core  # the last match wins\n/docs/ @docs-team\n";
+    const posted: string[] = [];
+    github = (route, init) => {
+      if (route === "/repos/o/live/issues/1") return Response.json({ title: "t", body: "b", labels: [{ name: "bounty:500" }] });
+      if (route === "/repos/o/live/pulls/7") return new Response("diff");
+      if (route === "/repos/o/live/issues/7/comments") return (posted.push(JSON.parse(String(init?.body)).body), Response.json({}));
+      if (route === "/repos/o/live/contents/CODEOWNERS" && codeowners) return new Response(codeowners);
+      if (route.startsWith("/repos/o/live/contents/")) return new Response("", { status: 404 });
+      throw new Error(`unexpected GitHub ${route}`);
+    };
+    process.env.BOUNTYPAY_DEMO = "0";
+    try {
+      const live = { ...pr(7, 1), repo: "o/live" };
+      clearBounties();
+      await ingest(live);
+      assert.deepEqual(mentioned(posted[0]), ["alice", "org/core"]);
+      codeowners = null;
+      clearBounties();
+      await ingest(live);
+      assert.deepEqual(mentioned(posted[1]), []);
+      assert.match(posted[1], /waiting for a maintainer/);
+    } finally {
+      process.env.BOUNTYPAY_DEMO = "1";
+    }
+  });
 });
