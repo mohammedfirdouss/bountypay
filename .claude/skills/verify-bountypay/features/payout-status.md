@@ -26,6 +26,6 @@ Preconditions:
 
 ## Gotchas
 
-- A local run with no tunnel never receives PayPal events, but the dashboard lookup still settles the status within one or two loads. With the current sandbox sender, PayPal denies the batch and the row shows `failed`.
+- A local run with no tunnel never receives PayPal events, but the dashboard lookup still settles the status within one or two loads. A sandbox sender registered in a country without Payouts (for example Nigeria) gets every batch denied, and the row shows `failed`. The demo uses a UK sandbox merchant, so the row shows `succeeded`.
 - Sandbox payouts to addresses without a sandbox account end up `unclaimed`. Use a sandbox personal account email as the payee to see `succeeded`.
 - A forged event cannot be replayed locally to fake this, because verification calls PayPal. Do not stub it.

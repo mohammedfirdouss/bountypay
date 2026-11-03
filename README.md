@@ -2,6 +2,17 @@
 
 Open-source maintainers put bounties on issues and then spend their evenings checking PRs and sending money by hand. BountyPay does that settlement for them. Label an issue `bounty:50`, and when a PR that says `Fixes #12` and `PayPal: dev@example.com` is merged, Claude reads the issue and the diff and decides whether the PR really resolves the issue. Inside a mandate written in code (at least 80% confidence, at most $100 per bounty) BountyPay pays the contributor through PayPal Payouts and posts the receipt on the PR. Everything outside the mandate waits in an AG Grid dashboard where a maintainer approves or rejects it. A bounty pays at most once, however many times GitHub redelivers the webhook or a maintainer double-clicks.
 
+## For judges
+
+- **Live demo:** LIVE_URL. It runs on Render's free tier, so the first load after it has been idle takes about 50 seconds.
+- **Dashboard token:** in the Devpost testing instructions. You need it to use Approve and Reject.
+- **Try it:**
+  1. Open the dashboard. If it's empty, run `npm run demo -- --url LIVE_URL` from a clone of this repo. That posts six signed GitHub merge webhooks.
+  2. Within a minute, Claude judges each PR. PR #10 is paid automatically through PayPal sandbox Payouts, and its PayPal status turns `succeeded`. PR #11 (a typo-only "fix") and PR #12 (over the $100 cap) wait for review.
+  3. Unlock with the token and **Approve** PR #11 to pay it through the same path. Search, filter by state, or export CSV in the grid.
+- **What runs for real:** Claude (`claude-opus-5-5`) and PayPal sandbox Payouts, with payout status from PayPal. GitHub issues and diffs come from `demo/fixtures.json`, so you need no GitHub setup.
+- **Run it locally:** see [Quickstart](#quickstart-offline-demo-mode). `npm test` runs 25 tests.
+
 ## How it works
 
 ```mermaid
