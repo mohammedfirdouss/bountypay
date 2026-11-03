@@ -80,7 +80,7 @@ export default function Page() {
           </svg>
           <div>
             <h1>
-              BountyPay <span className="pill pill-sandbox">Sandbox</span>
+              BountyPay <span className="pill pill-sandbox" title="Payouts use PayPal's sandbox: real API calls, test money.">PayPal sandbox</span>
               <Suspense>
                 <OfflinePill />
               </Suspense>
