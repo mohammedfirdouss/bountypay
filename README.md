@@ -67,20 +67,6 @@ To use the real Claude and PayPal sandbox, set `ANTHROPIC_API_KEY`, `PAYPAL_CLIE
 4. Held bounties mention the maintainers in their PR comment. Set `BOUNTYPAY_MAINTAINERS`, or BountyPay uses the owners on the `*` line of the repo's CODEOWNERS.
 5. Optional: add a PayPal app webhook to `https://<host>/api/paypal` for the `PAYMENT.PAYOUTS-ITEM.*` events, and set `PAYPAL_WEBHOOK_ID`.
 
-## Environment
-
-| Variable | Purpose |
-| --- | --- |
-| `ANTHROPIC_API_KEY` | Claude judges each merged PR |
-| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | PayPal sandbox app that sends payouts |
-| `PAYPAL_WEBHOOK_ID` | Verifies PayPal webhooks |
-| `GITHUB_WEBHOOK_SECRET` | Verifies GitHub webhooks |
-| `GITHUB_TOKEN` | Reads issues, diffs and CODEOWNERS, posts comments (not used in demo mode) |
-| `BOUNTYPAY_DEMO` | `1` uses `demo/fixtures.json` and logs comments. `offline` also stands in for Claude and PayPal, so no keys are needed |
-| `BOUNTYPAY_MAINTAINERS` | GitHub handles to mention on held bounties, comma-separated. Defaults to CODEOWNERS, or the fixture list in demo mode |
-| `BOUNTYPAY_DB` | SQLite path, default `./bountypay.db` |
-| `DASHBOARD_TOKEN` | Required for Approve and Reject when set |
-
 ## Why the sandbox merchant is in the UK
 
 BountyPay was built in Nigeria. PayPal denied every payout from a Nigeria-registered sandbox business account, even a verified one holding USD 5,000. PayPal doesn't offer business accounts or Payouts to Nigerian businesses, so the demo uses UK sandbox accounts. Reaching contributors in send-only markets like Nigeria is BountyPay's next problem to solve.
