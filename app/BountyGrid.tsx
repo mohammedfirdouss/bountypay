@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { Policy, Row, State } from "@/lib/bounty.ts";
 import { BountyPanel, Meter } from "./BountyPanel.tsx";
 import { APPROVERS, approverOf, holdReason, holdReasons, PAYPAL, percent, STATES, usd, verdictOf } from "./labels.ts";
-import { ReviewButtons, ReviewProvider, useReview, type Notice } from "./Review.tsx";
+import { attempt, ReviewButtons, ReviewProvider, useReview, type Notice, type Outcome } from "./Review.tsx";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -29,9 +29,9 @@ type Props = {
   policy: Policy;
   canAct: boolean;
   demo: boolean;
-  onApprove: (id: string) => Promise<void>;
-  onReject: (id: string) => Promise<void>;
-  onRunDemo: () => Promise<void>;
+  onApprove: (id: string) => Promise<Outcome>;
+  onReject: (id: string) => Promise<Outcome>;
+  onRunDemo: () => Promise<Outcome>;
 };
 
 type GridContext = { demo: boolean };
@@ -436,12 +436,12 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
                 title="Clears the demo bounties and replays every fixture PR through Claude and PayPal sandbox"
                 onClick={() =>
                   startDemo(async () => {
-                    try {
-                      await onRunDemo();
-                      setNotice({ tone: "ok", text: "Replaying the demo PRs. Rows appear as Claude judges each one." });
-                    } catch (e) {
-                      setNotice({ tone: "error", text: `Couldn't start the demo: ${e instanceof Error ? e.message : String(e)}` });
-                    }
+                    const outcome = await attempt(onRunDemo);
+                    setNotice(
+                      outcome.ok
+                        ? { tone: "ok", text: "Replaying the demo PRs. Rows appear as Claude judges each one." }
+                        : { tone: "error", text: `Couldn't start the demo: ${outcome.message}` },
+                    );
                   })
                 }
               >

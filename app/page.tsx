@@ -6,6 +6,7 @@ import { approve, checkPendingPayouts, listBounties, POLICY, reject } from "@/li
 import { ensureDemoSeeded, runDemo } from "@/lib/demo.ts";
 import { mode } from "@/lib/mode.ts";
 import { BountyGrid } from "./BountyGrid.tsx";
+import type { Outcome } from "./Review.tsx";
 
 const COOKIE = "bountypay_token";
 
@@ -14,28 +15,42 @@ async function authorized(): Promise<boolean> {
   return !token || (await cookies()).get(COOKIE)?.value === token;
 }
 
-async function onApprove(id: string) {
+const OK: Outcome = { ok: true };
+const LOCKED: Outcome = { ok: false, message: "Enter the dashboard token first." };
+const GONE: Outcome = { ok: false, message: "This bounty no longer exists. A demo replay may have cleared it." };
+
+const exists = (id: string) => listBounties().some((r) => r.id === id);
+
+async function onApprove(id: string): Promise<Outcome> {
   "use server";
-  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
-  await approve(id);
   refresh();
+  if (!(await authorized())) return LOCKED;
+  if (!exists(id)) return GONE;
+  const b = await approve(id);
+  if (b.state === "failed") return { ok: false, message: `PayPal did not take the payout (${b.error}). Approve again to retry; it never pays twice.` };
+  if (b.state === "rejected") return { ok: false, message: "A maintainer already rejected it." };
+  return OK;
 }
 
-async function onReject(id: string) {
+async function onReject(id: string): Promise<Outcome> {
   "use server";
-  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
-  await reject(id);
   refresh();
+  if (!(await authorized())) return LOCKED;
+  if (!exists(id)) return GONE;
+  const b = await reject(id);
+  if (b.state === "sent") return { ok: false, message: "PayPal already accepted the payout, so it can no longer be rejected." };
+  return OK;
 }
 
 const demo = () => mode() !== "live";
 
-async function onRunDemo() {
+async function onRunDemo(): Promise<Outcome> {
   "use server";
-  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
-  if (!demo()) throw new Error("The demo only runs in demo or offline mode.");
-  after(() => runDemo().catch((e) => console.error("demo replay failed:", e)));
   refresh();
+  if (!(await authorized())) return LOCKED;
+  if (!demo()) return { ok: false, message: "The demo only runs in demo or offline mode." };
+  after(() => runDemo().catch((e) => console.error("demo replay failed:", e)));
+  return OK;
 }
 
 async function unlock(form: FormData) {

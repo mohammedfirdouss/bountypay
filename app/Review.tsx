@@ -7,6 +7,20 @@ import { usd } from "./labels.ts";
 type Act = Row["actions"][number];
 type Where = "grid" | "panel";
 export type Notice = { tone: "ok" | "error"; text: string };
+/** What a dashboard server action reports. Expected failures come back as a message, because production Next hides thrown ones. */
+export type Outcome = { ok: true } | { ok: false; message: string };
+
+const UNEXPECTED = "Something went wrong on the server. Its log has the details.";
+
+/** Runs a server action and turns an unexpected throw into the same shape as an expected failure. */
+export async function attempt(action: () => Promise<Outcome>): Promise<Outcome> {
+  try {
+    return await action();
+  } catch (e) {
+    console.error(e);
+    return { ok: false, message: UNEXPECTED };
+  }
+}
 
 type Review = {
   canAct: boolean;
@@ -29,7 +43,7 @@ const useReviewContext = () => {
 /** Approve asks first and names the money; Reject runs at once. Both report through `notify`, never alert(). */
 export function useReview(
   canAct: boolean,
-  run: Record<Act, (id: string) => Promise<void>>,
+  run: Record<Act, (id: string) => Promise<Outcome>>,
   notify: (n: Notice) => void,
 ): Review {
   const [confirming, setConfirming] = useState<Review["confirming"]>(null);
@@ -39,17 +53,13 @@ export function useReview(
     setConfirming(null);
     setRunning((r) => ({ ...r, [row.id]: act }));
     startTransition(async () => {
-      try {
-        await run[act](row.id);
-        notify({
-          tone: "ok",
-          text: act === "approve" ? `Approved ${usd(row.amount)} to ${row.payee} for ${row.id}.` : `Rejected ${row.id}.`,
-        });
-      } catch (e) {
-        notify({ tone: "error", text: `Couldn't ${act} ${row.id}: ${e instanceof Error ? e.message : String(e)}` });
-      } finally {
-        setRunning(({ [row.id]: _, ...rest }) => rest);
-      }
+      const outcome = await attempt(() => run[act](row.id));
+      setRunning(({ [row.id]: _, ...rest }) => rest);
+      notify(
+        outcome.ok
+          ? { tone: "ok", text: act === "approve" ? `Approved ${usd(row.amount)} to ${row.payee} for ${row.id}.` : `Rejected ${row.id}.` }
+          : { tone: "error", text: `Couldn't ${act} ${row.id}: ${outcome.message}` },
+      );
     });
   };
 
