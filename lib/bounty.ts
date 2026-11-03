@@ -1,7 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { comment, fetchBountyIssue, fetchDiff, type MergedPr } from "./github.ts";
 import { judge, Verdict } from "./judge.ts";
-import { fetchPayoutStatus, sendPayout, type PayoutStatus } from "./paypal.ts";
+import { fetchPayoutStatus, sendPayout, type PayoutResult, type PayoutStatus } from "./paypal.ts";
 
 export type BountyId = string & { readonly __brand: "BountyId" };
 export type Cents = number & { readonly __brand: "Cents" };
@@ -36,9 +36,10 @@ const MOVES = {
   claim: { by: "github", from: ["rejected"], to: "judging" },
   verdictPay: { by: "claude", from: ["judging"], to: "paying" },
   verdictHold: { by: "claude", from: ["judging"], to: "held" },
-  approve: { by: "maintainer", from: ["judging", "held", "failed"], to: "paying" },
-  reject: { by: "maintainer", from: ["judging", "held", "failed"], to: "rejected" },
-  payoutSent: { by: "paypal", from: ["paying"], to: "sent" },
+  approve: { by: "maintainer", from: ["judging", "held", "paying", "failed"], to: "paying" },
+  reject: { by: "maintainer", from: ["judging", "held", "paying", "failed"], to: "rejected" },
+  // PayPal accepting the batch is final, even if a maintainer gave up on a stuck row meanwhile.
+  payoutSent: { by: "paypal", from: ["paying", "failed", "rejected"], to: "sent" },
   payoutError: { by: "paypal", from: ["paying"], to: "failed" },
 } as const satisfies Record<string, { by: string; from: readonly State[]; to: State }>;
 type Move = keyof typeof MOVES;
@@ -177,12 +178,18 @@ export function listBounties(): Row[] {
 async function resumePayout(id: BountyId): Promise<Bounty> {
   const b = load(id)!;
   if (b.state !== "paying") return b;
-  const r = await sendPayout({
-    claimKey: `${b.id}@${b.pr}`,
-    to: b.payee,
-    amount: b.amount,
-    note: `Bounty for ${b.id}, PR #${b.pr}`,
-  });
+  let r: PayoutResult;
+  try {
+    r = await sendPayout({
+      claimKey: `${b.id}@${b.pr}:${b.payee}`,
+      to: b.payee,
+      amount: b.amount,
+      note: `Bounty for ${b.id}, PR #${b.pr}`,
+    });
+  } catch (e) {
+    console.error(`payout failed for ${id}:`, e);
+    r = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
   const done = r.ok
     ? move(id, "payoutSent", { payoutBatchId: r.batchId })
     : move(id, "payoutError", { error: r.error });

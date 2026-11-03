@@ -92,13 +92,21 @@ describe("store", () => {
     assert.equal(insertClaim(claim({ id, pr: 10 })).pr, 10);
     assert.equal(insertClaim(claim({ id, pr: 11 })).pr, 10);
   });
-  test("compare-and-swap: of two approves, exactly one wins", () => {
+  test("compare-and-swap: of two verdicts, exactly one lands", () => {
     const id = bountyId("s/cas", 1);
     insertClaim(claim({ id }));
-    move(id, "verdictHold", { verdict: verdict("hold", 0.9), reason: "judged_unresolved" });
-    const wins = [move(id, "approve", { approvedBy: "maintainer" }), move(id, "approve", { approvedBy: "maintainer" })];
+    const wins = [
+      move(id, "verdictHold", { verdict: verdict("hold", 0.9), reason: "judged_unresolved" }),
+      move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" }),
+    ];
     assert.equal(wins.filter(Boolean).length, 1);
-    assert.equal(move(id, "reject", {}), null, "a paying row cannot be rejected");
+    assert.equal(row(id).state, "held");
+  });
+  test("a stuck paying row offers approve and reject", () => {
+    const id = bountyId("s/stuck", 1);
+    insertClaim(claim({ id }));
+    move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
+    assert.deepEqual(row(id).actions, ["approve", "reject"]);
   });
   test("held rows offer approve and reject, sent rows offer nothing", () => {
     const id = bountyId("s/actions", 1);
@@ -151,6 +159,7 @@ describe("flow against fake Claude and PayPal", () => {
   let claudeSays: (prompt: string) => object | "refuse" | "throw";
   let batches: Map<string, string>;
   let comments: string[];
+  let paypalLosesNextResponse: boolean;
   const lookups = new Map<string, () => Response>();
 
   globalThis.fetch = async (input, init) => {
@@ -191,6 +200,10 @@ describe("flow against fake Claude and PayPal", () => {
         });
       }
       batches.set(sid, `BATCH${batches.size + 1}`);
+      if (paypalLosesNextResponse) {
+        paypalLosesNextResponse = false;
+        return json(503, { name: "INTERNAL_SERVICE_ERROR" });
+      }
       return json(201, { batch_header: { payout_batch_id: batches.get(sid), batch_status: "PENDING" } });
     }
     const lookup = /\/v1\/payments\/payouts\/([^/?#]+)$/.exec(url);
@@ -206,6 +219,7 @@ describe("flow against fake Claude and PayPal", () => {
   beforeEach(() => {
     batches = new Map();
     comments = [];
+    paypalLosesNextResponse = false;
     claudeSays = () => verdict("pay", 0.95);
   });
 
@@ -250,20 +264,22 @@ describe("flow against fake Claude and PayPal", () => {
     await ingest(pr(12, 3));
     const held = row("bountypay/demo#3");
     assert.equal(held.state === "held" && held.reason, "over_cap");
-    const [a, b] = await Promise.all([approve(held.id), approve(held.id)]);
-    assert.deepEqual([a.state, b.state].sort(), ["paying", "sent"]);
+    await Promise.all([approve(held.id), approve(held.id)]);
     assert.equal(row(held.id).state, "sent");
     assert.equal(batches.size, 1);
   });
 
-  test("a crash after PayPal accepted the batch resumes to the original batch", async () => {
+  test("a payout whose PayPal response is lost fails instead of sticking, and a retry finds the original batch", async () => {
     const id = bountyId("bountypay/demo", 2);
-    insertClaim({ ...claim({ id, repo: "bountypay/demo", issue: 2, pr: 11 }) });
-    move(id, "approve", { approvedBy: "maintainer" });
-    batches.set((await import("./paypal.ts")).senderBatchId(`${id}@11`), "BATCH-ORIGINAL");
+    paypalLosesNextResponse = true;
     await ingest(pr(11, 2));
-    const b = row(id);
-    assert.equal(b.state === "sent" && b.payoutBatchId, "BATCH-ORIGINAL");
+    let b = row(id);
+    assert.equal(b.state === "failed" && b.error, "PayPal payouts: 503");
+    assert.deepEqual(b.actions, ["approve", "reject"]);
+    await approve(id);
+    b = row(id);
+    assert.equal(b.state === "sent" && b.payoutBatchId, "BATCH1");
+    assert.equal(batches.size, 1);
   });
 
   test("a refusal, or a Claude call that fails, holds instead of paying", async () => {
