@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Cents, Email } from "./bounty.ts";
 
 const BASE = "https://api-m.sandbox.paypal.com";
+const TIMEOUT_MS = 10_000;
 
 export const PAYOUT_STATUSES = [
   "pending",
@@ -28,6 +29,7 @@ async function token(): Promise<string> {
     method: "POST",
     headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`PayPal OAuth: ${res.status}`);
   const json = await res.json();
@@ -42,7 +44,7 @@ export function senderBatchId(claimKey: string): string {
 /**
  * At most one payout per claim. PayPal rejects a sender_batch_id used in the last 30 days and links
  * to the original batch, so a repeat after a redelivery, crash, or double click returns that batch.
- * ok:false means PayPal refused for good and created no batch. Network, 401, 429, and 5xx throw.
+ * ok:false means PayPal refused for good and created no batch. Network, timeout, 401, 429, and 5xx throw.
  */
 export async function sendPayout(p: {
   claimKey: string;
@@ -70,6 +72,7 @@ export async function sendPayout(p: {
         },
       ],
     }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (res.status === 401) cached = undefined;
   if (res.status === 401 || res.status === 429 || res.status >= 500) throw new Error(`PayPal payouts: ${res.status}`);
@@ -103,7 +106,7 @@ const ITEM_STATUS: Record<string, PayoutStatus> = {
 export async function fetchPayoutStatus(batchId: string): Promise<PayoutStatus> {
   const res = await fetch(`${BASE}/v1/payments/payouts/${encodeURIComponent(batchId)}`, {
     headers: { Authorization: `Bearer ${await token()}` },
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (res.status === 401) cached = undefined;
   if (!res.ok) throw new Error(`PayPal payout lookup: ${res.status}`);
@@ -127,6 +130,7 @@ export async function parsePayoutWebhook(raw: string, headers: Headers): Promise
     method: "POST",
     headers: { Authorization: `Bearer ${await token()}`, "Content-Type": "application/json" },
     body,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok || (await res.json()).verification_status !== "SUCCESS") return { kind: "unauthorized" };
 
