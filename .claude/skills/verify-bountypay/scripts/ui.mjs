@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Usage:
 //   node ui.mjs RUN_DIR snapshot NAME              grid text + screenshot into RUN_DIR/evidence/NAME.{txt,png}
-//   node ui.mjs RUN_DIR click BOUNTY_ID LABEL NAME  click Approve|Reject on that row, wait, then snapshot as NAME
+//   node ui.mjs RUN_DIR click BOUNTY_ID LABEL NAME  click Approve|Reject on that row (Approve also answers its Pay confirm), wait, then snapshot as NAME
 // Drives a throwaway headless Chrome (own profile under RUN_DIR) over the DevTools protocol.
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -78,20 +78,18 @@ try {
     await snapshot(args[0] ?? "grid");
   } else {
     const [bountyId, label, name] = args;
-    await evaluate("window.alert = (m) => { window.__lastAlert = String(m); }");
-    const clicked = await evaluate(`(() => {
-      const sel = '[row-id=' + ${JSON.stringify(JSON.stringify(bountyId))} + ']';
-      const btn = [...document.querySelectorAll(sel + ' button')].find(b => b.innerText.trim() === ${JSON.stringify(label)});
-      if (!btn) return false;
-      btn.click();
-      return true;
-    })()`);
-    if (!clicked) throw new Error(`no "${label}" button on row ${bountyId} (row missing, or state does not allow it)`);
+    const rowButton = (text) => `[...document.querySelectorAll('[row-id=' + ${JSON.stringify(JSON.stringify(bountyId))} + '] button')].find(b => b.innerText.trim() === ${JSON.stringify(text)})`;
+    const click = (text) => evaluate(`(() => { const b = ${rowButton(text)}; if (!b) return false; b.click(); return true; })()`);
+    if (!(await click(label))) throw new Error(`no "${label}" button on row ${bountyId} (row missing, or state does not allow it)`);
+    if (label === "Approve") {
+      await sleep(300);
+      if (!(await click("Pay"))) throw new Error(`Approve on ${bountyId} did not ask "Pay ... to ...?"`);
+    }
     await sleep(4000);
-    const alertText = await evaluate("window.__lastAlert ?? ''");
-    if (alertText) {
-      writeFileSync(`${runDir}/evidence/${name}.alert.txt`, alertText + "\n");
-      console.log(`dashboard alert: ${alertText}`);
+    const errorText = await evaluate("document.querySelector('.notice[data-tone=error]')?.innerText.replace(/\\s*×$/, '').trim() ?? ''");
+    if (errorText) {
+      writeFileSync(`${runDir}/evidence/${name}.alert.txt`, errorText + "\n");
+      console.log(`dashboard error: ${errorText}`);
     }
     await load();
     await snapshot(name);

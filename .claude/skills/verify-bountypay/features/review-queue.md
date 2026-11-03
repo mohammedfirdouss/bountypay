@@ -6,6 +6,7 @@ A maintainer resolves held bounties from the dashboard. Approve pays through the
 
 - `review-buttons` shows Approve and Reject only on rows in `judging`, `held`, `paying` or `failed`. A row stuck in `paying` can be retried, because the PayPal batch id comes from the claim (bounty, PR, payee) and PayPal never pays one batch id twice.
 - `review-reject` moves the row to `rejected` and logs a decline comment.
+- `review-confirm` asks "Pay <amount> to <payee>?" before Approve pays, in the grid row and in the detail panel. Cancel or Esc leaves the row untouched.
 - `review-approve` moves the row to `paying`, then `sent` (PayPal accepted) or `failed` (PayPal refused, errored, or timed out after 10 s). The receipt says "Approved by a maintainer", and a failure comment says a maintainer can retry.
 - `review-token` hides actions behind the `Dashboard token` field when `DASHBOARD_TOKEN` is set.
 

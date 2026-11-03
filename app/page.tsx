@@ -1,8 +1,9 @@
 import { refresh } from "next/cache";
 import { cookies } from "next/headers";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { Suspense } from "react";
 import { approve, checkPendingPayouts, listBounties, POLICY, reject } from "@/lib/bounty.ts";
+import { ensureDemoSeeded, runDemo } from "@/lib/demo.ts";
 import { BountyGrid } from "./BountyGrid.tsx";
 
 const COOKIE = "bountypay_token";
@@ -26,6 +27,16 @@ async function onReject(id: string) {
   refresh();
 }
 
+const demo = () => process.env.BOUNTYPAY_DEMO === "1";
+
+async function onRunDemo() {
+  "use server";
+  if (!(await authorized())) throw new Error("Enter the dashboard token first.");
+  if (!demo()) throw new Error("The demo only runs with BOUNTYPAY_DEMO=1.");
+  after(() => runDemo().catch((e) => console.error("demo replay failed:", e)));
+  refresh();
+}
+
 async function unlock(form: FormData) {
   "use server";
   (await cookies()).set(COOKIE, String(form.get("token") ?? ""), {
@@ -43,10 +54,13 @@ export default function Page() {
     <main>
       <header className="masthead">
         <div className="brand">
-          <svg className="mark" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="9" fill="#0070e0" />
-            <circle cx="16" cy="16" r="9" fill="none" stroke="#fff" strokeWidth="2.2" opacity="0.45" />
-            <path d="M11.5 16.4l3.1 3.1 6-6.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg className="mark" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="16" fill="#064e3b" />
+            <path d="M8 44 Q32 10 56 44" stroke="#6ee7b7" strokeWidth="5" fill="none" strokeLinecap="round" />
+            <path d="M6 46h52" stroke="#6ee7b7" strokeWidth="4" strokeLinecap="round" />
+            <path d="M18 32v14M32 26v20M46 32v14" stroke="#6ee7b7" strokeWidth="2.5" strokeLinecap="round" opacity=".7" />
+            <circle cx="32" cy="22" r="7" fill="#fbbf24" />
+            <path d="M6 53c6 3 10 3 16 0s10-3 16 0 10 3 16 0" stroke="#34d399" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity=".6" />
           </svg>
           <div>
             <h1>
@@ -115,6 +129,17 @@ async function Access() {
 async function Dashboard() {
   await connection();
   const canAct = await authorized();
+  ensureDemoSeeded();
   await checkPendingPayouts();
-  return <BountyGrid rows={listBounties()} canAct={canAct} onApprove={onApprove} onReject={onReject} />;
+  return (
+    <BountyGrid
+      rows={listBounties()}
+      policy={POLICY}
+      canAct={canAct}
+      demo={demo()}
+      onApprove={onApprove}
+      onReject={onReject}
+      onRunDemo={onRunDemo}
+    />
+  );
 }
