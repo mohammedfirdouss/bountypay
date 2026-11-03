@@ -1,4 +1,20 @@
+<div align="center">
+
+<img src="app/icon.svg" alt="BountyPay logo" width="96" height="96">
+
 # BountyPay
+
+Open-source bounties, paid through PayPal once Claude checks the merged PR.
+
+[![Live demo](https://img.shields.io/badge/live_demo-bountypay.onrender.com-064e3b)](https://bountypay.onrender.com)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue)](#license)
+[![Built with Claude](https://img.shields.io/badge/built_with-Claude-d97757)](https://www.anthropic.com/claude)
+[![PayPal sandbox](https://img.shields.io/badge/PayPal-sandbox_Payouts-003087)](https://developer.paypal.com/docs/payouts/)
+[![AG Grid](https://img.shields.io/badge/dashboard-AG_Grid-1e6ae0)](https://www.ag-grid.com/)
+
+![The BountyPay dashboard with five demo bounties: two sent through PayPal, three held for review](docs/screenshots/dashboard.png)
+
+</div>
 
 Open-source maintainers put bounties on issues, then check PRs and send money by hand. BountyPay settles bounties automatically. When a PR that fixes a `bounty:<usd>` issue is merged, Claude checks whether the diff really resolves the issue. If Claude is at least 80% confident and the bounty is $100 or less, BountyPay pays the contributor through **PayPal Payouts** and comments a receipt on the PR. Everything else waits in an **AG Grid** dashboard for a maintainer to approve or reject. A bounty is paid at most once.
 
@@ -30,6 +46,14 @@ flowchart LR
 - **Claude advises; code decides.** Claude returns pay or hold, a confidence score and its reasoning. The pure `decide()` function in `lib/bounty.ts` applies the 80% and $100 limits. A refusal or an error holds the bounty.
 - **Never pays twice.** There is one row per bounty issue, and every state change is a compare-and-swap. The PayPal `sender_batch_id` is derived from the claim, so a retry finds the original payout instead of sending a second one.
 - **Truthful status.** Payout status comes from PayPal's webhook, or from a lookup when the dashboard loads. "Paid out" counts only payouts PayPal reports as succeeded.
+
+Click a row to read Claude's full reasoning. A paid bounty shows its PayPal batch, its status and whether PayPal's webhook or a status check confirmed it.
+
+![Detail panel for PR #10: Claude is 92% sure, paid automatically, PayPal status Succeeded](docs/screenshots/panel-sent.png)
+
+PR #15 hides instructions to approve itself in its description, a fake `</diff>` block and a code comment. Claude ignores them and the bounty is held at 2%.
+
+![Detail panel for PR #15: held at 2% confidence, Claude flags the prompt injection](docs/screenshots/panel-injection.png)
 
 ## Run locally
 
