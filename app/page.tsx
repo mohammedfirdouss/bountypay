@@ -4,6 +4,7 @@ import { after, connection } from "next/server";
 import { Suspense } from "react";
 import { approve, checkPendingPayouts, listBounties, POLICY, reject } from "@/lib/bounty.ts";
 import { ensureDemoSeeded, runDemo } from "@/lib/demo.ts";
+import { mode } from "@/lib/mode.ts";
 import { BountyGrid } from "./BountyGrid.tsx";
 
 const COOKIE = "bountypay_token";
@@ -27,12 +28,12 @@ async function onReject(id: string) {
   refresh();
 }
 
-const demo = () => process.env.BOUNTYPAY_DEMO === "1";
+const demo = () => mode() !== "live";
 
 async function onRunDemo() {
   "use server";
   if (!(await authorized())) throw new Error("Enter the dashboard token first.");
-  if (!demo()) throw new Error("The demo only runs with BOUNTYPAY_DEMO=1.");
+  if (!demo()) throw new Error("The demo only runs in demo or offline mode.");
   after(() => runDemo().catch((e) => console.error("demo replay failed:", e)));
   refresh();
 }
@@ -65,6 +66,9 @@ export default function Page() {
           <div>
             <h1>
               BountyPay <span className="pill pill-sandbox">Sandbox</span>
+              <Suspense>
+                <OfflinePill />
+              </Suspense>
             </h1>
             <p className="tagline">Open-source bounties, paid through PayPal once Claude checks the merged PR.</p>
           </div>
@@ -94,6 +98,16 @@ export default function Page() {
         <Dashboard />
       </Suspense>
     </main>
+  );
+}
+
+async function OfflinePill() {
+  await connection();
+  if (mode() !== "offline") return null;
+  return (
+    <span className="pill pill-offline" title="Built-in stand-ins replace Claude and PayPal, so no keys are needed">
+      Offline
+    </span>
   );
 }
 

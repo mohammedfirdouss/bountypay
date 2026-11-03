@@ -124,6 +124,12 @@ button {
   color: #422006;
 }
 
+.pill-offline {
+  background: rgb(255 255 255 / 0.12);
+  color: #e5e7eb;
+  border: 1px solid rgb(255 255 255 / 0.35);
+}
+
 .masthead-side {
   display: flex;
   flex-direction: column;
