@@ -26,7 +26,7 @@ export async function judge(input: {
   pr: { title: string; body: string };
   diff: string;
 }): Promise<Verdict | "refused"> {
-  client ??= new Anthropic();
+  client ??= new Anthropic({ timeout: 60_000, maxRetries: 1 });
   const diff =
     input.diff.length > MAX_DIFF_CHARS ? input.diff.slice(0, MAX_DIFF_CHARS) + "\n[truncated]" : input.diff;
   const response = await client.beta.messages.parse({
