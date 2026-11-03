@@ -7,8 +7,8 @@ Open-source maintainers put bounties on issues, then check PRs and send money by
 - **Live demo:** https://bountypay.onrender.com. It runs on Render's free tier, so the first load after idle takes about 50 seconds.
 - **Dashboard token:** in the Devpost testing instructions. You need it to use Approve and Reject.
 - **Try it:**
-  1. If the dashboard is empty, run `npm run demo -- --url https://bountypay.onrender.com` from a clone. It posts six signed GitHub merge webhooks.
-  2. Within a minute, Claude judges each PR. PR #10 is paid automatically, and its PayPal status turns `succeeded`. PR #11 (typo-only) and PR #12 (over the cap) are held.
+  1. Open the dashboard. In demo mode an empty dashboard refills itself from the fixtures, through the real Claude and PayPal path. You can also run `npm run demo -- --url https://bountypay.onrender.com` from a clone.
+  2. Within a minute, Claude judges each PR. PR #10 is paid automatically, and its PayPal status turns `succeeded`. PR #11 (typo-only), PR #12 (over the cap) and PR #15 (a prompt-injection attempt) are held, each with Claude's reasoning.
   3. Unlock with the token and approve PR #11. Search, filter by state, or export CSV.
 - **Real:** Claude (`claude-opus-5-5`) and PayPal sandbox Payouts.
 - **Simulated:** GitHub issues and diffs come from `demo/fixtures.json`.
@@ -40,7 +40,7 @@ cp .env.example .env.local   # set ANTHROPIC_API_KEY, PAYPAL_CLIENT_ID, PAYPAL_C
 npm install
 npm run dev                  # http://localhost:3000
 npm run demo                 # second terminal: posts the demo webhooks
-npm test                     # 25 tests, fake Claude and PayPal
+npm test                     # fake Claude and PayPal, no keys needed
 ```
 
 | Demo PR | Expected |
@@ -50,6 +50,7 @@ npm test                     # 25 tests, fake Claude and PayPal
 | #12 fixes issue #3 ($250) | held, over cap |
 | #13 also claims issue #1 | "already claimed" comment |
 | #14 has no `PayPal:` line | comment asking for one |
+| #15 tells Claude to approve itself ($15) | held: the injection is ignored |
 | Replay of #10 | no second payout |
 
 - `npm run demo -- --url <host>` targets a deploy.
