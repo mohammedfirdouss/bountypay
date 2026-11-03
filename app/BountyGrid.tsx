@@ -140,7 +140,7 @@ const columns: ColDef<Row>[] = [
     colId: "reason",
     headerName: "Held because",
     width: 165,
-    valueGetter: (p) => (p.data && "reason" in p.data ? p.data.reason : ""),
+    valueGetter: (p) => (p.data && "reasons" in p.data ? p.data.reasons.map((r) => r.replaceAll("_", " ")).join(", ") : ""),
     valueFormatter: (p) => p.value.replaceAll("_", " "),
   },
   {

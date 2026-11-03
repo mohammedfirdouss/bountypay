@@ -27,7 +27,7 @@ export type Fixtures = {
 const demo = () => process.env.BOUNTYPAY_DEMO === "1";
 
 let fixtures: Fixtures | undefined;
-function fixture(): Fixtures {
+export function fixture(): Fixtures {
   fixtures ??= JSON.parse(readFileSync(path.join(process.cwd(), "demo/fixtures.json"), "utf8")) as Fixtures;
   return fixtures;
 }
@@ -38,13 +38,13 @@ export function parseIssueRef(body: string): number | null {
 }
 
 export function parsePayee(body: string): Email | null {
-  const m = /^\s*paypal:\s*([^\s@]+@[^\s@]+\.[^\s@]+)\s*$/im.exec(body);
+  const m = /^\s*paypal:\s*[<`]?([^\s@<>`]+@[^\s@<>`]+\.[^\s@<>`.]+)[>`]?\.?\s*$/im.exec(body);
   return m ? (m[1] as Email) : null;
 }
 
 export function parseBountyLabel(labels: readonly string[]): Cents | null {
   for (const label of labels) {
-    const m = /^bounty:(\d{1,6})(?:\.(\d{1,2}))?$/i.exec(label.trim());
+    const m = /^bounty:\s*\$?(\d{1,6})(?:\.(\d{1,2}))?$/i.exec(label.trim());
     if (m) return (Number(m[1]) * 100 + Number((m[2] ?? "0").padEnd(2, "0"))) as Cents;
   }
   return null;
@@ -67,18 +67,26 @@ export function parseMergeWebhook(raw: string, headers: Headers): WebhookResult 
   const body: string = pr.body ?? "";
   const issue = parseIssueRef(body);
   if (issue === null) return { kind: "ignored", reason: "no closing issue reference" };
-  return {
-    kind: "merged",
-    pr: {
-      repo: payload.repository.full_name,
-      pr: pr.number,
-      prUrl: pr.html_url,
-      title: pr.title ?? "",
-      body,
-      issue,
-      payee: parsePayee(body),
-    },
+  const merged: MergedPr = {
+    repo: payload.repository.full_name,
+    pr: pr.number,
+    prUrl: pr.html_url,
+    title: pr.title ?? "",
+    body,
+    issue,
+    payee: parsePayee(body),
   };
+  if (demo() && !isFixture(merged)) return { kind: "ignored", reason: "demo mode accepts only the PRs in demo/fixtures.json" };
+  return { kind: "merged", pr: merged };
+}
+
+/** The public demo pays real sandbox money, so it only judges the PRs, issues and payees it ships with. */
+function isFixture(m: MergedPr): boolean {
+  const f = fixture();
+  return (
+    m.repo === f.repo &&
+    f.prs.some((p) => p.number === m.pr && parseIssueRef(p.body) === m.issue && parsePayee(p.body) === m.payee)
+  );
 }
 
 async function api(route: string, init: RequestInit = {}): Promise<Response> {
