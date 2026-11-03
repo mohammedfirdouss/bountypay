@@ -173,8 +173,16 @@ describe("flow against fake Claude and PayPal", () => {
       if (existing) {
         return json(400, {
           name: "USER_BUSINESS_ERROR",
-          message: "Batch with given sender_batch_id already exists",
-          links: [{ href: `https://api-m.sandbox.paypal.com/v1/payments/payouts/${existing}`, rel: "self" }],
+          message: "User business error.",
+          details: [
+            {
+              field: "SENDER_BATCH_ID",
+              location: "body",
+              issue: "Batch with given sender_batch_id already exists",
+              link: [{ href: `https://api.sandbox.paypal.com/v1/payments/payouts/${existing}`, rel: "self", method: "GET" }],
+            },
+          ],
+          links: [],
         });
       }
       batches.set(sid, `BATCH${batches.size + 1}`);
