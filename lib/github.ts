@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Cents, Email } from "./bounty.ts";
+import { mode } from "./mode.ts";
 
 export type MergedPr = {
   repo: string;
@@ -21,10 +22,12 @@ export type WebhookResult =
 export type Fixtures = {
   repo: string;
   issues: Record<string, { title: string; body: string; labels: string[] }>;
-  prs: { number: number; title: string; body: string; diff: string }[];
+  /** `offline` is the verdict that stands in for Claude's in offline mode. */
+  prs: { number: number; title: string; body: string; diff: string; offline?: unknown }[];
 };
 
-const demo = () => process.env.BOUNTYPAY_DEMO === "1";
+/** Demo and offline mode read GitHub from demo/fixtures.json and log comments instead of posting them. */
+const demo = () => mode() !== "live";
 
 let fixtures: Fixtures | undefined;
 export function fixture(): Fixtures {

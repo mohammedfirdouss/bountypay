@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
+import { fixture } from "./github.ts";
+import { mode } from "./mode.ts";
 
 export const Verdict = z.object({
   decision: z.enum(["pay", "hold"]),
@@ -27,13 +29,15 @@ reasoning is at most three sentences a maintainer can check against the diff.`;
 
 const PAYEE_LINE = /^\s*paypal:.*$/gim;
 
+type JudgeInput = {
+  issue: { title: string; body: string };
+  pr: { pr: number; title: string; body: string };
+  diff: string;
+};
+
 let client: Anthropic | undefined;
 
-export async function judge(input: {
-  issue: { title: string; body: string };
-  pr: { title: string; body: string };
-  diff: string;
-}): Promise<Verdict | "refused"> {
+async function askClaude(input: JudgeInput): Promise<Verdict | "refused"> {
   client ??= new Anthropic({ timeout: 60_000, maxRetries: 1 });
   const suffix = randomBytes(6).toString("hex");
   const tagged = (name: string, text: string) => `<${name}-${suffix}>\n${text}\n</${name}-${suffix}>`;
@@ -61,3 +65,13 @@ export async function judge(input: {
   if (!response.parsed_output) throw new Error(`no verdict (stop_reason ${response.stop_reason})`);
   return response.parsed_output;
 }
+
+/** Offline mode's stand-in for Claude: the verdict demo/fixtures.json gives the PR. */
+async function fixtureVerdict(input: JudgeInput): Promise<Verdict> {
+  const v = fixture().prs.find((p) => p.number === input.pr.pr)?.offline;
+  if (!v) throw new Error(`demo/fixtures.json has no offline verdict for PR #${input.pr.pr}`);
+  return Verdict.parse(v);
+}
+
+export const judge: (input: JudgeInput) => Promise<Verdict | "refused"> =
+  mode() === "offline" ? fixtureVerdict : askClaude;
