@@ -305,6 +305,11 @@ export function insertClaim(c: Claim): Bounty {
   return load(c.id)!;
 }
 
+/** Empties the store. The demo reset is the only caller. */
+export function clearBounties(): void {
+  db().exec("DELETE FROM bounties; DELETE FROM notices; DELETE FROM payout_status;");
+}
+
 function firstNotice(repo: string, pr: number, kind: "no_payee" | "claimed"): boolean {
   const r = db().prepare("INSERT INTO notices (repo, pr, kind) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").run(repo, pr, kind);
   return r.changes > 0;

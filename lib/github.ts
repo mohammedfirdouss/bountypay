@@ -27,7 +27,7 @@ export type Fixtures = {
 const demo = () => process.env.BOUNTYPAY_DEMO === "1";
 
 let fixtures: Fixtures | undefined;
-function fixture(): Fixtures {
+export function fixture(): Fixtures {
   fixtures ??= JSON.parse(readFileSync(path.join(process.cwd(), "demo/fixtures.json"), "utf8")) as Fixtures;
   return fixtures;
 }

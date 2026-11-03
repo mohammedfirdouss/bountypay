@@ -10,10 +10,20 @@ process.env.ANTHROPIC_API_KEY = "test-key";
 process.env.PAYPAL_CLIENT_ID = "id";
 process.env.PAYPAL_CLIENT_SECRET = "secret";
 
-const { approve, bountyId, checkPendingPayouts, decide, ingest, insertClaim, listBounties, move, recordPayoutStatus, reject } =
-  await import(
-  "./bounty.ts"
-);
+const {
+  approve,
+  bountyId,
+  checkPendingPayouts,
+  clearBounties,
+  decide,
+  ingest,
+  insertClaim,
+  listBounties,
+  move,
+  recordPayoutStatus,
+  reject,
+} = await import("./bounty.ts");
+const { ensureDemoSeeded, runDemo } = await import("./demo.ts");
 const { parseBountyLabel, parseIssueRef, parseMergeWebhook, parsePayee, sign } = await import("./github.ts");
 
 const claim = (over: Partial<Claim> = {}): Claim => ({
@@ -179,7 +189,8 @@ describe("store", () => {
 });
 
 describe("flow against fake Claude and PayPal", () => {
-  let claudeSays: (prompt: string) => object | "refuse" | "throw";
+  type Said = object | "refuse" | "throw";
+  let claudeSays: (prompt: string) => Said | Promise<Said>;
   let batches: Map<string, string>;
   let comments: string[];
   let paypalLosesNextResponse: boolean;
@@ -190,7 +201,7 @@ describe("flow against fake Claude and PayPal", () => {
     const json = (status: number, body: unknown) =>
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     if (url.startsWith("https://api.anthropic.com/v1/messages")) {
-      const said = claudeSays(String(init?.body));
+      const said = await claudeSays(String(init?.body));
       if (said === "throw") return json(400, { type: "error", error: { type: "invalid_request_error", message: "boom" } });
       return json(200, {
         id: "msg_1",
@@ -394,5 +405,45 @@ describe("flow against fake Claude and PayPal", () => {
     await checkPendingPayouts();
     const b = row(id);
     assert.equal(b.state === "sent" && b.payoutStatus, "pending");
+  });
+
+  test("an empty demo store reseeds itself, and concurrent replays run once", async () => {
+    clearBounties();
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    claudeSays = async () => {
+      if (++calls === 2) await gate;
+      return verdict("hold", 0.2);
+    };
+    ensureDemoSeeded();
+    while (calls < 2) await new Promise((r) => setImmediate(r));
+    assert.equal(row(bountyId("bountypay/demo", 1)).state, "held");
+    const second = runDemo();
+    release();
+    await second;
+    assert.equal(calls, 4, "PRs #10, #11, #12 and #15 are judged once each");
+    assert.deepEqual(listBounties().map((b) => b.id).sort(), [1, 2, 3, 5].map((i) => `bountypay/demo#${i}`));
+    ensureDemoSeeded();
+    assert.equal(listBounties().length, 4, "a seeded store is left alone");
+  });
+
+  test("a reset claim reuses its PayPal batch, but a different payee never inherits it", async () => {
+    const batch = () => {
+      const b = row(bountyId("bountypay/demo", 1));
+      return b.state === "sent" ? b.payoutBatchId : null;
+    };
+    clearBounties();
+    await ingest(pr(10, 1));
+    const first = batch();
+    assert.ok(first);
+    clearBounties();
+    await ingest(pr(10, 1));
+    assert.equal(batch(), first);
+    clearBounties();
+    await ingest(pr(10, 1, "eve@example.com"));
+    assert.ok(batch());
+    assert.notEqual(batch(), first);
+    assert.equal(batches.size, 2);
   });
 });
