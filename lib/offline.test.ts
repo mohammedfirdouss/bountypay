@@ -31,11 +31,12 @@ test("offline mode runs the whole demo with no keys and no network", async () =>
     return { state: b.state, pr: b.pr };
   };
   assert.deepEqual(
-    ["1", "2", "3", "5"].map(summary),
+    ["1", "2", "3", "4", "5"].map(summary),
     [
       { state: "sent", pr: 10, batch: "OFFLINE-", status: "succeeded" },
       { state: "held", pr: 11, reasons: ["judged_unresolved", "low_confidence"] },
       { state: "held", pr: 12, reasons: ["over_cap"] },
+      { state: "sent", pr: 14, batch: "OFFLINE-", status: "succeeded" },
       { state: "held", pr: 15, reasons: ["judged_unresolved", "low_confidence"] },
     ],
   );
