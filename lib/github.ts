@@ -23,6 +23,7 @@ export type WebhookResult =
 
 export type Fixtures = {
   repo: string;
+  maintainers?: string[];
   issues: Record<string, { title: string; body: string; labels: string[] }>;
   /** `offline` is the verdict that stands in for Claude's in offline mode. `comments` are the author's later comments. */
   prs: { number: number; title: string; body: string; diff: string; offline?: unknown; comments?: string[] }[];
@@ -176,4 +177,40 @@ export async function comment(repo: string, issueOrPr: number, body: string): Pr
     return;
   }
   await api(`/repos/${repo}/issues/${issueOrPr}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+}
+
+const HANDLE = /^[a-z\d](?:[a-z\d-]{0,38})(?:\/[\w.-]+)?$/i;
+
+/** Keeps the entries that are GitHub user or org/team names, without a leading `@`. */
+function handles(list: readonly string[]): string[] {
+  return list.map((h) => h.trim().replace(/^@/, "")).filter((h) => HANDLE.test(h));
+}
+
+/** The owners on the last `*` line of a CODEOWNERS file: the repo's default reviewers. */
+export function defaultOwners(codeowners: string): string[] {
+  let owners: string[] = [];
+  for (const line of codeowners.split("\n")) {
+    const [pattern, ...rest] = line.replace(/#.*/, "").trim().split(/\s+/);
+    if (pattern === "*") owners = rest.filter((o) => o.startsWith("@"));
+  }
+  return handles(owners);
+}
+
+/**
+ * Who to mention on a held bounty: BOUNTYPAY_MAINTAINERS, else the fixture list in demo mode or the
+ * repo's CODEOWNERS default owners in live mode. Empty when none is set. Never throws.
+ */
+export async function maintainers(repo: string): Promise<string[]> {
+  const configured = handles((process.env.BOUNTYPAY_MAINTAINERS ?? "").split(","));
+  if (configured.length) return configured;
+  if (demo()) return handles(fixture().maintainers ?? []);
+  try {
+    for (const file of [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"]) {
+      const res = await api(`/repos/${repo}/contents/${file}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+      if (res.ok) return defaultOwners(await res.text());
+    }
+  } catch (e) {
+    console.error(`CODEOWNERS lookup failed for ${repo}:`, e);
+  }
+  return [];
 }

@@ -1,5 +1,6 @@
 {
   "repo": "bountypay/demo",
+  "maintainers": ["demo-maintainer"],
   "issues": {
     "1": {
       "title": "CLI crashes when the config file is empty",
