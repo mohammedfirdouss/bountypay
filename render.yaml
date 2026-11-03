@@ -23,5 +23,7 @@ services:
         sync: false
       - key: GITHUB_TOKEN
         sync: false
+      - key: BOUNTYPAY_MAINTAINERS
+        sync: false
       - key: DASHBOARD_TOKEN
         generateValue: true

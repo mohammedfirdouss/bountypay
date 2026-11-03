@@ -16,6 +16,15 @@ check "dashboard renders at http://localhost:$PORT/" "curl -fsS http://localhost
 check "webhook rejects a bad signature with 401" "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'X-GitHub-Event: pull_request' -H 'X-Hub-Signature-256: sha256=00' -d '{}' http://localhost:$PORT/api/github)\" = 401 ]"
 check "demo mode is on (server log shows no GitHub token use)" "! grep -q 'GitHub /repos' $RUN_DIR/server.log"
 
+if [ "$(cat "$RUN_DIR/mode" 2>/dev/null)" = offline ]; then
+  # npm rewrites its own process title, so read the environment of every process in the server's group.
+  group_env() { pgrep -g "$(ps -o pgid= -p "$PID" | tr -d ' ')" | xargs -I{} ps eww -o command= -p {} | tr ' ' '\n'; }
+  for key in ANTHROPIC_API_KEY PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET; do
+    check "$key is blank in the offline server's environment" "group_env | grep -qx '$key=' && ! group_env | grep -q '^$key=.'"
+  done
+  echo "info offline mode: fixture verdicts stand in for Claude, and a built-in stand-in for PayPal"
+  exit $fail
+fi
 for key in ANTHROPIC_API_KEY PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET; do
   if [ -n "${!key:-}" ] || grep -Eq "^$key=.+" "$REPO/.env.local" 2>/dev/null; then
     echo "info $key present (real external calls will run)"
