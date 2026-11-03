@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Policy, Row } from "@/lib/bounty.ts";
-import { APPROVERS, approverOf, holdReason, holdReasons, PAYPAL, percent, STATES, usd, verdictOf } from "./labels.ts";
+import { APPROVERS, approverOf, holdReason, holdReasons, PAYOUT_SOURCE, PAYPAL, percent, STATES, usd, verdictOf } from "./labels.ts";
 import { ReviewButtons } from "./Review.tsx";
 
 type Props = {
@@ -156,6 +156,12 @@ export function BountyPanel({ row, policy, position, canAct, modal, onStep, onCl
                 <dd>
                   <span className={`badge badge-pp-${row.payoutStatus}`}>{row.payoutStatus}</span> {PAYPAL[row.payoutStatus]}.
                 </dd>
+                {row.payoutStatusVia && (
+                  <>
+                    <dt>Confirmed by</dt>
+                    <dd className={`via via-${row.payoutStatusVia}`}>{PAYOUT_SOURCE[row.payoutStatusVia]}</dd>
+                  </>
+                )}
               </dl>
             ) : (
               <p className="error-text">{row.error}</p>
