@@ -34,16 +34,25 @@ describe("decide", () => {
     assert.deepEqual(decide(claim(), verdict("pay", 0.9)), { next: "pay" });
   });
   test("a confident pay verdict over the cap is held", () => {
-    assert.deepEqual(decide(claim({ amount: 250_00 as Cents }), verdict("pay", 0.99)), { next: "hold", reason: "over_cap" });
+    assert.deepEqual(decide(claim({ amount: 250_00 as Cents }), verdict("pay", 0.99)), { next: "hold", reasons: ["over_cap"] });
   });
   test("low confidence is held even under the cap", () => {
-    assert.deepEqual(decide(claim(), verdict("pay", 0.79)), { next: "hold", reason: "low_confidence" });
+    assert.deepEqual(decide(claim(), verdict("pay", 0.79)), { next: "hold", reasons: ["low_confidence"] });
   });
   test("a hold verdict is held", () => {
-    assert.deepEqual(decide(claim(), verdict("hold", 0.95)), { next: "hold", reason: "judged_unresolved" });
+    assert.deepEqual(decide(claim(), verdict("hold", 0.95)), { next: "hold", reasons: ["judged_unresolved"] });
   });
   test("a refusal is held", () => {
-    assert.deepEqual(decide(claim(), "refused"), { next: "hold", reason: "refused" });
+    assert.deepEqual(decide(claim(), "refused"), { next: "hold", reasons: ["refused"] });
+  });
+  test("every failing check is reported, most important first", () => {
+    const big = claim({ amount: 250_00 as Cents });
+    assert.deepEqual(decide(big, verdict("hold", 0.3)), {
+      next: "hold",
+      reasons: ["judged_unresolved", "low_confidence", "over_cap"],
+    });
+    assert.deepEqual(decide(big, "failed"), { next: "hold", reasons: ["judge_failed", "over_cap"] });
+    assert.deepEqual(decide(big, "refused"), { next: "hold", reasons: ["refused", "over_cap"] });
   });
 });
 
@@ -96,7 +105,7 @@ describe("store", () => {
     const id = bountyId("s/cas", 1);
     insertClaim(claim({ id }));
     const wins = [
-      move(id, "verdictHold", { verdict: verdict("hold", 0.9), reason: "judged_unresolved" }),
+      move(id, "verdictHold", { verdict: verdict("hold", 0.9), reasons: ["judged_unresolved"] }),
       move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" }),
     ];
     assert.equal(wins.filter(Boolean).length, 1);
@@ -111,7 +120,7 @@ describe("store", () => {
   test("held rows offer approve and reject, sent rows offer nothing", () => {
     const id = bountyId("s/actions", 1);
     insertClaim(claim({ id }));
-    move(id, "verdictHold", { verdict: null, reason: "judge_failed" });
+    move(id, "verdictHold", { verdict: null, reasons: ["judge_failed"] });
     assert.deepEqual(row(id).actions, ["approve", "reject"]);
     move(id, "approve", { approvedBy: "maintainer" });
     move(id, "payoutSent", { payoutBatchId: "B1" });
@@ -242,6 +251,9 @@ describe("flow against fake Claude and PayPal", () => {
     await ingest(pr(10, 1));
     assert.equal(batches.size, 1);
     assert.equal(comments.length, 1, "one receipt comment");
+    assert.match(comments[0], /PayPal accepted a \$50 payout/);
+    assert.match(comments[0], /Approved automatically by Claude at 95% confidence\./);
+    assert.match(comments[0], /> r\n/);
   });
 
   test("a second PR for a claimed issue does not pay", async () => {
@@ -261,10 +273,17 @@ describe("flow against fake Claude and PayPal", () => {
   });
 
   test("over the cap is held for review, then a double-clicked approve pays once", async () => {
+    claudeSays = () => ({ ...verdict("pay", 0.74), reasoning: "Streams lines with readline." });
     await ingest(pr(12, 3));
     const held = row("bountypay/demo#3");
-    assert.equal(held.state === "held" && held.reason, "over_cap");
+    assert.deepEqual(held.state === "held" && held.reasons, ["low_confidence", "over_cap"]);
+    assert.equal(comments.length, 1);
+    assert.match(comments[0], /- Claude is 74% confident; auto-pay needs 80%\.\n- \$250 is over the \$100 auto-pay limit\./);
+    assert.match(comments[0], /> Streams lines with readline\./);
+    assert.match(comments[0], /A maintainer will approve or decline it/);
     await Promise.all([approve(held.id), approve(held.id)]);
+    assert.equal(comments.length, 2, "one receipt despite the double click");
+    assert.match(comments[1], /Approved by a maintainer\./);
     assert.equal(row(held.id).state, "sent");
     assert.equal(batches.size, 1);
   });
@@ -275,6 +294,7 @@ describe("flow against fake Claude and PayPal", () => {
     await ingest(pr(11, 2));
     let b = row(id);
     assert.equal(b.state === "failed" && b.error, "PayPal payouts: 503");
+    assert.match(comments.at(-1)!, /PayPal did not confirm the \$40 payout \(PayPal payouts: 503\)\. A maintainer can retry it/);
     assert.deepEqual(b.actions, ["approve", "reject"]);
     await approve(id);
     b = row(id);
@@ -289,12 +309,14 @@ describe("flow against fake Claude and PayPal", () => {
     const id = bountyId("bountypay/demo", 4);
     await ingest(pr(14, 4));
     let b = row(id);
-    assert.equal(b.state === "held" && b.reason, "refused");
+    assert.deepEqual(b.state === "held" && b.reasons, ["refused"]);
+    assert.match(comments.at(-1)!, /- Claude declined to review this PR\./);
     await reject(id);
+    assert.match(comments.at(-1)!, /a maintainer declined to pay the \$20 bounty from this PR\. If you think that is wrong/);
     claudeSays = () => "throw";
     await ingest(pr(15, 4));
     b = row(id);
-    assert.equal(b.state === "held" && b.reason, "judge_failed");
+    assert.deepEqual(b.state === "held" && b.reasons, ["judge_failed"]);
     assert.equal(batches.size, 0);
   });
 

@@ -20,11 +20,11 @@ export type Claim = {
 
 type Approver = "claude" | "maintainer";
 
-export type HoldReason = "judged_unresolved" | "low_confidence" | "over_cap" | "refused" | "judge_failed";
+export type HoldReason = "judge_failed" | "refused" | "judged_unresolved" | "low_confidence" | "over_cap";
 
 export type Bounty = Claim & { updatedAt: string } & (
     | { state: "judging" }
-    | { state: "held"; verdict: Verdict | null; reason: HoldReason }
+    | { state: "held"; verdict: Verdict | null; reasons: HoldReason[] }
     | { state: "paying"; verdict: Verdict | null; approvedBy: Approver }
     | { state: "sent"; verdict: Verdict | null; approvedBy: Approver; payoutBatchId: string; payoutStatus: PayoutStatus }
     | { state: "failed"; verdict: Verdict | null; approvedBy: Approver; error: string }
@@ -50,23 +50,49 @@ type Patch<S extends State> = Omit<Extract<Bounty, { state: S }>, keyof Claim | 
 export type Row = Bounty & { actions: MaintainerMove[] };
 
 export type Policy = { minConfidence: number; cap: Cents };
-export type Decision = { next: "pay" } | { next: "hold"; reason: HoldReason };
+export type Decision = { next: "pay" } | { next: "hold"; reasons: HoldReason[] };
+/** What came back from asking Claude: a verdict, a refusal, or no answer at all. */
+export type Judgment = Verdict | "refused" | "failed";
 
 export const POLICY: Policy = { minConfidence: 0.8, cap: 100_00 as Cents };
 
-export function decide(claim: Claim, verdict: Verdict | "refused", policy: Policy = POLICY): Decision {
-  if (verdict === "refused") return { next: "hold", reason: "refused" };
-  if (verdict.decision === "hold") return { next: "hold", reason: "judged_unresolved" };
-  if (verdict.confidence < policy.minConfidence) return { next: "hold", reason: "low_confidence" };
-  if (claim.amount > policy.cap) return { next: "hold", reason: "over_cap" };
-  return { next: "pay" };
+type Held = Extract<Bounty, { state: "held" }>;
+
+/** Every way a claim can miss the mandate, most important first, with the words a contributor reads. */
+const HOLDS: Record<HoldReason, { applies(c: Claim, j: Judgment, p: Policy): boolean; says(b: Held): string }> = {
+  judge_failed: {
+    applies: (_, j) => j === "failed",
+    says: () => "Claude could not be reached to review the diff",
+  },
+  refused: {
+    applies: (_, j) => j === "refused",
+    says: () => "Claude declined to review this PR",
+  },
+  judged_unresolved: {
+    applies: (_, j) => typeof j === "object" && j.decision === "hold",
+    says: (b) => `Claude does not think the diff resolves #${b.issue}`,
+  },
+  low_confidence: {
+    applies: (_, j, p) => typeof j === "object" && j.confidence < p.minConfidence,
+    says: (b) => `Claude is ${percent(b.verdict?.confidence ?? 0)} confident; auto-pay needs ${percent(POLICY.minConfidence)}`,
+  },
+  over_cap: {
+    applies: (c, _, p) => c.amount > p.cap,
+    says: (b) => `${usd(b.amount)} is over the ${usd(POLICY.cap)} auto-pay limit`,
+  },
+};
+
+export function decide(claim: Claim, judgment: Judgment, policy: Policy = POLICY): Decision {
+  const reasons = (Object.keys(HOLDS) as HoldReason[]).filter((r) => HOLDS[r].applies(claim, judgment, policy));
+  return reasons.length ? { next: "hold", reasons } : { next: "pay" };
 }
 
 export function bountyId(repo: string, issue: number): BountyId {
   return `${repo}#${issue}` as BountyId;
 }
 
-const usd = (c: Cents) => `$${(c / 100).toFixed(2)}`;
+const usd = (c: Cents) => (c % 100 === 0 ? `$${c / 100}` : `$${(c / 100).toFixed(2)}`);
+const percent = (x: number) => `${Math.floor(x * 100 + 1e-9)}%`;
 
 /** Webhook path. Safe to call any number of times, concurrently, for the same PR. */
 export async function ingest(merge: MergedPr): Promise<void> {
@@ -84,20 +110,18 @@ export async function ingest(merge: MergedPr): Promise<void> {
   }
 
   if (stored.state === "judging") {
-    let verdict: Verdict | "refused";
+    let judgment: Judgment;
     try {
-      verdict = await judge({ issue, pr: merge, diff: await fetchDiff(merge.repo, merge.pr) });
+      judgment = await judge({ issue, pr: merge, diff: await fetchDiff(merge.repo, merge.pr) });
     } catch (e) {
       console.error(`judge failed for ${id}:`, e);
-      const held = move(id, "verdictHold", { verdict: null, reason: "judge_failed" });
-      if (held) await comment(held.repo, held.pr, heldNotice(held));
-      return;
+      judgment = "failed";
     }
-    const d = decide(stored, verdict);
-    const kept = verdict === "refused" ? null : verdict;
+    const d = decide(stored, judgment);
+    const kept = typeof judgment === "object" ? judgment : null;
     if (d.next === "hold") {
-      const held = move(id, "verdictHold", { verdict: kept, reason: d.reason });
-      if (held) await comment(held.repo, held.pr, heldNotice(held));
+      const held = move(id, "verdictHold", { verdict: kept, reasons: d.reasons });
+      if (held) await comment(held.repo, held.pr, notice(held));
       return;
     }
     move(id, "verdictPay", { verdict: kept, approvedBy: "claude" });
@@ -116,7 +140,7 @@ export async function reject(id: string): Promise<Bounty> {
   const b = load(id);
   if (!b) throw new Error(`unknown bounty ${id}`);
   const done = move(b.id, "reject", {});
-  if (done) await comment(done.repo, done.pr, "BountyPay: a maintainer declined to pay this bounty from this PR.");
+  if (done) await comment(done.repo, done.pr, notice(done));
   return done ?? load(id)!;
 }
 
@@ -193,27 +217,35 @@ async function resumePayout(id: BountyId): Promise<Bounty> {
   const done = r.ok
     ? move(id, "payoutSent", { payoutBatchId: r.batchId })
     : move(id, "payoutError", { error: r.error });
-  if (done) {
-    await comment(
-      done.repo,
-      done.pr,
-      done.state === "sent"
-        ? `BountyPay: PayPal accepted a ${usd(done.amount)} payout for this PR (payout batch ${done.payoutBatchId}). Thank you!`
-        : "BountyPay: PayPal declined the payout. A maintainer will follow up.",
-    );
-  }
+  if (done) await comment(done.repo, done.pr, notice(done));
   return done ?? load(id)!;
 }
 
-function heldNotice(b: Bounty & { state: "held" }): string {
-  return `BountyPay: this ${usd(b.amount)} bounty is waiting for maintainer review (${b.reason.replaceAll("_", " ")}).`;
+/** The PR comment for a bounty that just reached a state the contributor should hear about. */
+function notice(b: Held | Extract<Bounty, { state: "sent" | "failed" | "rejected" }>): string {
+  const reasoning = b.verdict ? `\n\nClaude's reasoning:\n> ${b.verdict.reasoning.replaceAll("\n", "\n> ")}` : "";
+  switch (b.state) {
+    case "held":
+      return `BountyPay: this ${usd(b.amount)} bounty is waiting for a maintainer because:\n${b.reasons.map((r) => `- ${HOLDS[r].says(b)}.`).join("\n")}${reasoning}\n\nA maintainer will approve or decline it from the BountyPay dashboard, and you will get another comment either way.`;
+    case "sent": {
+      const by =
+        b.approvedBy === "claude" && b.verdict
+          ? `Approved automatically by Claude at ${percent(b.verdict.confidence)} confidence.`
+          : "Approved by a maintainer.";
+      return `BountyPay: PayPal accepted a ${usd(b.amount)} payout for this PR (payout batch ${b.payoutBatchId}). ${by}${reasoning}\n\nThank you!`;
+    }
+    case "failed":
+      return `BountyPay: PayPal did not confirm the ${usd(b.amount)} payout (${b.error}). A maintainer can retry it from the dashboard, and a retry never pays twice. If the PayPal address in this PR is wrong, say so here.`;
+    case "rejected":
+      return `BountyPay: a maintainer declined to pay the ${usd(b.amount)} bounty from this PR. If you think that is wrong, reply here and ask them to take another look. Another PR that resolves #${b.issue} can still claim it.`;
+  }
 }
 
 const PAYPAL_STATUS = "(SELECT status FROM payout_status WHERE batch_id = bounties.payout_batch_id) AS paypal_status";
 
 const COLUMNS: Record<string, string> = {
   verdict: "verdict",
-  reason: "reason",
+  reasons: "reason",
   approvedBy: "approved_by",
   payoutBatchId: "payout_batch_id",
   error: "error",
@@ -233,7 +265,9 @@ export function move<M extends Move>(
   const values: SQLInputValue[] = [to, new Date().toISOString()];
   for (const [key, value] of Object.entries(patch)) {
     sets.push(`${COLUMNS[key]} = ?`);
-    values.push(key === "verdict" ? (value ? JSON.stringify(value) : null) : (value as SQLInputValue));
+    values.push(
+      key === "verdict" ? (value ? JSON.stringify(value) : null) : key === "reasons" ? (value as HoldReason[]).join(",") : (value as SQLInputValue),
+    );
   }
   const row = db()
     .prepare(
@@ -290,7 +324,7 @@ function toBounty(row: Record<string, SQLInputValue>): Bounty {
     case "judging":
       return { ...claim, state };
     case "held":
-      return { ...claim, state, verdict, reason: row.reason as HoldReason };
+      return { ...claim, state, verdict, reasons: (row.reason as string).split(",") as HoldReason[] };
     case "paying":
       return { ...claim, state, verdict, approvedBy };
     case "sent":
