@@ -25,7 +25,7 @@ Preconditions:
 - **Post deliveries.** Run `GITHUB_WEBHOOK_SECRET=$(cat $RUN_DIR/secret) node scripts/demo.ts --url http://localhost:3100`. Its last line is the replay of PR #10, and PR #13 also claims issue #1.
 - **One row per issue.** Run `node .claude/skills/verify-bountypay/scripts/state.mjs "$RUN_DIR" --out "$RUN_DIR/evidence/once.json"`. `bountypay/demo#1` has `pr: 10`, not 13, and there is exactly one row for it.
 - **Comments.** Run `grep '\[demo comment\]' "$RUN_DIR/server.log"`. The log has `bountypay/demo#13: ... already claimed by #10` and `bountypay/demo#14: ... no \`PayPal: you@example.com\` line`. It has only one held or receipt comment for PR #10, despite the replay. Concurrent deliveries of one merge ask Claude once: the server keeps an in-process set of bounties being judged.
-- **No row for #4.** `once.json` has no `bountypay/demo#4`.
+- **#4 only through the comment.** `bountypay/demo#4` exists with `pr: 14`, claimed by the author's comment (see [payee-comment.md](./payee-comment.md)), not by the merge.
 - **Notices once.** Run the demo script a second time, then `grep -c 'already claimed' "$RUN_DIR/server.log"` and ``grep -c 'no `PayPal:' "$RUN_DIR/server.log"``. Each prints `1`.
 - **Batch key (keys present).** If `#1` reached `sent`, run the demo script again. `payout_batch_id` for `#1` is unchanged and no new receipt comment appears.
 
