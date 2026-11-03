@@ -28,6 +28,6 @@ Preconditions:
 
 ## Gotchas
 
-- `review-token` needs a server launched with a non-empty `DASHBOARD_TOKEN`. `launch.sh` clears it, so cover it in a separate run with `DASHBOARD_TOKEN=x` exported before launching, and edit nothing else.
+- `review-token` needs a server launched with a non-empty `DASHBOARD_TOKEN`. `launch.sh` passes through an exported value and defaults to empty, so cover it in a separate run with `DASHBOARD_TOKEN=x` exported before launching, and edit nothing else.
 - A payout that throws (network, 401, 429, 5xx, timeout) lands in `failed`, not `paying`. A row only stays `paying` while a payout is in flight or after a crash. Approve retries it, and a redelivery of the merge resumes it too.
 - Rows are keyed by issue (`#3`), but comments go to the PR (`#12`). Grep the log by PR number.
