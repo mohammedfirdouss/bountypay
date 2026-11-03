@@ -967,6 +967,15 @@ button {
   line-height: 1.45;
 }
 
+.via-webhook {
+  font-weight: 600;
+}
+
+.via-webhook::before {
+  content: "✓ ";
+  color: var(--green-800);
+}
+
 .facts code {
   font-size: 13px;
   overflow-wrap: anywhere;

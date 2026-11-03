@@ -165,8 +165,8 @@ describe("store", () => {
     insertClaim(claim({ id }));
     move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
     move(id, "payoutSent", { payoutBatchId: "B-status" });
-    recordPayoutStatus("B-status", "succeeded", "2026-11-02T10:00:02Z");
-    recordPayoutStatus("B-status", "unclaimed", "2026-11-02T10:00:01Z");
+    recordPayoutStatus("B-status", "succeeded", "2026-11-02T10:00:02Z", "webhook");
+    recordPayoutStatus("B-status", "unclaimed", "2026-11-02T10:00:01Z", "webhook");
     const b = row(id);
     assert.equal(b.state === "sent" && b.payoutStatus, "succeeded");
   });
@@ -174,7 +174,7 @@ describe("store", () => {
     const id = bountyId("s/early", 1);
     insertClaim(claim({ id }));
     move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
-    recordPayoutStatus("B-early", "unclaimed", "2026-11-02T10:00:01Z");
+    recordPayoutStatus("B-early", "unclaimed", "2026-11-02T10:00:01Z", "webhook");
     move(id, "payoutSent", { payoutBatchId: "B-early" });
     const b = row(id);
     assert.equal(b.state === "sent" && b.payoutStatus, "unclaimed");
@@ -186,6 +186,17 @@ describe("store", () => {
     move(id, "payoutSent", { payoutBatchId: "B-pending" });
     const b = row(id);
     assert.equal(b.state === "sent" && b.payoutStatus, "pending");
+    assert.equal(b.state === "sent" && b.payoutStatusVia, null);
+  });
+  test("a webhook that repeats a status the lookup found takes the credit", () => {
+    const id = bountyId("s/via", 1);
+    insertClaim(claim({ id }));
+    move(id, "verdictPay", { verdict: verdict("pay", 0.9), approvedBy: "claude" });
+    move(id, "payoutSent", { payoutBatchId: "B-via" });
+    recordPayoutStatus("B-via", "succeeded", "2026-11-02T10:00:05Z", "lookup");
+    recordPayoutStatus("B-via", "succeeded", "2026-11-02T10:00:03Z", "webhook");
+    const b = row(id);
+    assert.equal(b.state === "sent" && `${b.payoutStatus} via ${b.payoutStatusVia}`, "succeeded via webhook");
   });
 });
 
@@ -401,7 +412,7 @@ describe("flow against fake Claude and PayPal", () => {
     );
     await checkPendingPayouts();
     const b = row(id);
-    assert.equal(b.state === "sent" && b.payoutStatus, "failed");
+    assert.equal(b.state === "sent" && `${b.payoutStatus} via ${b.payoutStatusVia}`, "failed via lookup");
   });
 
   test("a failed PayPal lookup leaves the payout pending", async () => {

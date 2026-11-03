@@ -7,6 +7,8 @@ export type BountyId = string & { readonly __brand: "BountyId" };
 export type Cents = number & { readonly __brand: "Cents" };
 export type Email = string & { readonly __brand: "Email" };
 export type { PayoutStatus };
+/** How BountyPay learned a payout's status: PayPal's webhook, or its own status lookup. */
+export type PayoutSource = "webhook" | "lookup";
 
 export type Claim = {
   id: BountyId;
@@ -26,7 +28,7 @@ export type Bounty = Claim & { updatedAt: string } & (
     | { state: "judging" }
     | { state: "held"; verdict: Verdict | null; reasons: HoldReason[] }
     | { state: "paying"; verdict: Verdict | null; approvedBy: Approver }
-    | { state: "sent"; verdict: Verdict | null; approvedBy: Approver; payoutBatchId: string; payoutStatus: PayoutStatus }
+    | { state: "sent"; verdict: Verdict | null; approvedBy: Approver; payoutBatchId: string; payoutStatus: PayoutStatus; payoutStatusVia: PayoutSource | null }
     | { state: "failed"; verdict: Verdict | null; approvedBy: Approver; error: string }
     | { state: "rejected"; verdict: Verdict | null }
   );
@@ -45,7 +47,7 @@ const MOVES = {
 type Move = keyof typeof MOVES;
 type MaintainerMove = { [M in Move]: (typeof MOVES)[M]["by"] extends "maintainer" ? M : never }[Move];
 
-type Patch<S extends State> = Omit<Extract<Bounty, { state: S }>, keyof Claim | "state" | "updatedAt" | "payoutStatus">;
+type Patch<S extends State> = Omit<Extract<Bounty, { state: S }>, keyof Claim | "state" | "updatedAt" | "payoutStatus" | "payoutStatusVia">;
 
 export type Row = Bounty & { actions: MaintainerMove[] };
 
@@ -162,14 +164,22 @@ export async function reject(id: string): Promise<Bounty> {
   return done ?? load(id)!;
 }
 
-export function recordPayoutStatus(batchId: string, status: PayoutStatus, at: string): void {
+/**
+ * Keeps the newest status per batch. A webhook that confirms the status a lookup already found
+ * still takes the credit, so the dashboard shows PayPal's own confirmation when it arrives.
+ */
+export function recordPayoutStatus(batchId: string, status: PayoutStatus, at: string, via: PayoutSource): void {
   db()
     .prepare(
-      `INSERT INTO payout_status (batch_id, status, at) VALUES (?, ?, ?)
-       ON CONFLICT(batch_id) DO UPDATE SET status = excluded.status, at = excluded.at
-       WHERE excluded.at >= payout_status.at`,
+      `INSERT INTO payout_status (batch_id, status, at, via) VALUES (?, ?, ?, ?)
+       ON CONFLICT(batch_id) DO UPDATE SET
+         status = CASE WHEN excluded.at >= payout_status.at THEN excluded.status ELSE payout_status.status END,
+         at = max(excluded.at, payout_status.at),
+         via = excluded.via
+       WHERE excluded.at >= payout_status.at
+          OR (excluded.via = 'webhook' AND excluded.status = payout_status.status)`,
     )
-    .run(batchId, status, at);
+    .run(batchId, status, at, via);
 }
 
 const LOOKUP_EVERY_MS = 30_000;
@@ -177,7 +187,7 @@ const lastLookup = new Map<string, number>();
 
 /**
  * Asks PayPal about sent payouts that no webhook has settled, at most once per batch every 30 s, and
- * records the answer as if the webhook had sent it. Never throws: a failed lookup leaves the row pending.
+ * records the answer as a lookup. Never throws: a failed lookup leaves the row pending.
  */
 export async function checkPendingPayouts(): Promise<void> {
   const now = Date.now();
@@ -194,7 +204,7 @@ export async function checkPendingPayouts(): Promise<void> {
       lastLookup.set(id, now);
       try {
         const status = await fetchPayoutStatus(id);
-        if (status !== "pending") recordPayoutStatus(id, status, new Date().toISOString());
+        if (status !== "pending") recordPayoutStatus(id, status, new Date().toISOString(), "lookup");
       } catch (e) {
         console.error(`payout lookup failed for ${id}:`, e);
       }
@@ -264,7 +274,10 @@ const mention = (handles: string[]) => (handles.length ? `\n\ncc ${handles.map((
 /** Claude's reasoning can echo the PR, so a zero-width space after each `@` keeps it from pinging anyone. */
 const unmention = (text: string) => text.replaceAll("@", "@\u200b");
 
-const PAYPAL_STATUS = "(SELECT status FROM payout_status WHERE batch_id = bounties.payout_batch_id) AS paypal_status";
+const PAYPAL_STATUS = [
+  "(SELECT status FROM payout_status WHERE batch_id = bounties.payout_batch_id) AS paypal_status",
+  "(SELECT via FROM payout_status WHERE batch_id = bounties.payout_batch_id) AS paypal_via",
+].join(", ");
 
 const COLUMNS: Record<string, string> = {
   verdict: "verdict",
@@ -369,6 +382,7 @@ function toBounty(row: Record<string, SQLInputValue>): Bounty {
         approvedBy,
         payoutBatchId: row.payout_batch_id as string,
         payoutStatus: (row.paypal_status as PayoutStatus | null) ?? "pending",
+        payoutStatusVia: (row.paypal_via as PayoutSource | null) ?? null,
       };
     case "failed":
       return { ...claim, state, verdict, approvedBy, error: row.error as string };
@@ -409,7 +423,11 @@ function db(): DatabaseSync {
     CREATE TABLE IF NOT EXISTS payout_status (
       batch_id TEXT PRIMARY KEY,
       status TEXT NOT NULL,
-      at TEXT NOT NULL
+      at TEXT NOT NULL,
+      via TEXT
     )`);
+  // Databases created before payout sources were recorded lack the column.
+  const cols = handle.prepare("SELECT name FROM pragma_table_info('payout_status')").all();
+  if (!cols.some((c) => c.name === "via")) handle.exec("ALTER TABLE payout_status ADD COLUMN via TEXT");
   return handle;
 }

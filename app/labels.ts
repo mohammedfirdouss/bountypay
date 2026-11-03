@@ -1,4 +1,4 @@
-import type { HoldReason, PayoutStatus, Policy, Row, State } from "@/lib/bounty.ts";
+import type { HoldReason, PayoutSource, PayoutStatus, Policy, Row, State } from "@/lib/bounty.ts";
 
 export type Approver = Extract<Row, { approvedBy: unknown }>["approvedBy"];
 
@@ -24,6 +24,11 @@ export const STATES: Record<State, { label: string; hint: string }> = {
 export const APPROVERS: Record<Approver, { label: string; hint: string }> = {
   claude: { label: "Claude", hint: "Claude paid it automatically. It was confident enough and the bounty was under the auto-pay limit" },
   maintainer: { label: "Maintainer", hint: "A maintainer approved it from this dashboard, whatever Claude's confidence" },
+};
+
+export const PAYOUT_SOURCE: Record<PayoutSource, string> = {
+  webhook: "PayPal's webhook",
+  lookup: "BountyPay's status check with PayPal",
 };
 
 export const PAYPAL: Record<PayoutStatus, string> = {
