@@ -69,6 +69,8 @@ const badge = (value: string, cls: string, title?: string, text = value) => (
   </span>
 );
 
+const text = ({ value, valueFormatted }: ICellRendererParams<Row>) => <span className="ellipsis">{valueFormatted ?? value}</span>;
+
 const subscribeNarrow = (cb: () => void) => {
   const m = matchMedia(NARROW);
   m.addEventListener("change", cb);
@@ -124,13 +126,16 @@ function buildColumns(policy: Policy, narrow: boolean, open: (id: string) => voi
       tooltipField: "payee",
       filter: "agTextColumnFilter",
       filterParams: oneCondition,
+      cellClass: "cell-flex",
+      cellRenderer: text,
     },
     {
       headerName: "Amount",
       field: "amount",
-      width: 100,
+      width: 110,
       type: "rightAligned",
-      cellClass: "num",
+      cellClass: "cell-flex num",
+      cellRenderer: text,
       filter: "agNumberColumnFilter",
       filterParams: oneCondition,
       filterValueGetter: (p) => (p.data ? p.data.amount / 100 : null),
@@ -279,7 +284,8 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
 
   const open = useCallback((id: string) => {
     setSelectedId((current) => {
-      if (current === null) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const active = document.activeElement;
+      if (current === null) opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
       return id;
     });
   }, []);
@@ -291,11 +297,9 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
     cancel();
     requestAnimationFrame(() => {
       const api = grid.current?.api;
-      if (opener.current?.isConnected) opener.current.focus();
-      else if (api && id) {
-        const index = api.getRowNode(id)?.rowIndex;
-        if (index != null) api.setFocusedCell(index, "id");
-      }
+      const index = id ? api?.getRowNode(id)?.rowIndex : null;
+      if (opener.current && !opener.current.closest(".ag-root")) opener.current.focus();
+      else if (api && index != null) api.setFocusedCell(index, "id");
       opener.current = null;
     });
   }, [selectedId, cancel]);
@@ -310,7 +314,8 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
     node?.setSelected(true, true);
     if (node?.displayed && node.rowIndex != null) {
       api.ensureIndexVisible(node.rowIndex);
-      setPosition({ index: node.rowIndex, count: api.getDisplayedRowCount() });
+      const next = { index: node.rowIndex, count: api.getDisplayedRowCount() };
+      setPosition((p) => (p?.index === next.index && p.count === next.count ? p : next));
     } else {
       setPosition(null);
     }
@@ -335,6 +340,8 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
     [selectedId, cancel],
   );
 
+  const context = useMemo<GridContext>(() => ({ demo }), [demo]);
+  const totals = useMemo(() => [{ id: `${shown.count} shown`, amount: shown.amount }], [shown]);
   const columns = useMemo(() => buildColumns(policy, narrow, open), [policy, narrow, open]);
 
   const onModelUpdated = useCallback(
@@ -469,7 +476,7 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
           theme={theme}
           rowData={rows}
           columnDefs={columns}
-          context={{ demo } satisfies GridContext}
+          context={context}
           getRowId={(p) => (p.rowPinned ? "total" : p.data.id)}
           quickFilterText={search}
           isExternalFilterPresent={() => stateRef.current !== null}
@@ -487,14 +494,18 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
             if (k.key === "Escape" && selectedId) close();
           }}
           rowSelection={{ mode: "singleRow", checkboxes: false, enableClickSelection: false }}
-          pinnedBottomRowData={[{ id: `${shown.count} shown`, amount: shown.amount }]}
+          pinnedBottomRowData={totals}
           rowClassRules={rowClassRules}
           rowHeight={56}
           tooltipShowDelay={300}
           domLayout="autoHeight"
           overlayComponent={Overlay}
         />
-        <p className="grid-hint">Click a row, or press Enter on it, to read Claude&apos;s full reasoning.</p>
+        <p className="grid-hint">
+          {narrow
+            ? "Tap a bounty to read Claude's reasoning and approve or reject it."
+            : "Click a row, or press Enter on it, to read Claude's full reasoning."}
+        </p>
       </section>
       {selected && (
         <BountyPanel row={selected} policy={policy} position={position} canAct={canAct} modal={narrow} onStep={step} onClose={close} />

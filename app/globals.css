@@ -134,6 +134,7 @@ button {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  margin-left: auto;
   gap: 8px;
 }
 
@@ -545,6 +546,21 @@ button {
 .ag-cell.cell-flex {
   display: flex;
   align-items: center;
+}
+
+.ag-cell.cell-flex.ag-right-aligned-cell {
+  justify-content: flex-end;
+}
+
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ag-cell button {
+  line-height: 1;
 }
 
 .bounty {
@@ -1025,6 +1041,14 @@ kbd {
   font: inherit;
   font-size: 11px;
   text-align: center;
+}
+
+@media (min-width: 1200px) {
+  main.beside-panel {
+    margin-right: 0;
+    padding-right: 488px;
+    transition: padding-right 0.18s ease-out;
+  }
 }
 
 @media (max-width: 720px) {

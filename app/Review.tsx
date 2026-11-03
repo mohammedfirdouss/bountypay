@@ -94,7 +94,7 @@ export function ReviewButtons({ row, where }: { row: Row; where: Where }) {
         aria-label={question}
         onKeyDown={(e) => {
           if (e.key !== "Escape") return;
-          e.stopPropagation();
+          e.preventDefault();
           cancel();
         }}
       >

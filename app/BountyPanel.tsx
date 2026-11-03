@@ -26,9 +26,32 @@ export function BountyPanel({ row, policy, position, canAct, modal, onStep, onCl
     ref.current?.focus();
   }, [row.id]);
 
+  const keys = useRef({ onStep, onClose });
+  keys.current = { onStep, onClose };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target;
+      const ours = t === document.body || (t instanceof Node && ref.current?.contains(t));
+      if (!ours || e.defaultPrevented) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        keys.current.onClose();
+      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !e.altKey && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        keys.current.onStep(e.key === "ArrowDown" ? 1 : -1);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   useEffect(() => {
     const main = document.querySelector("main");
-    if (!modal || !main) return;
+    if (!main) return;
+    if (!modal) {
+      main.classList.add("beside-panel");
+      return () => main.classList.remove("beside-panel");
+    }
     main.inert = true;
     return () => {
       main.inert = false;
@@ -43,15 +66,6 @@ export function BountyPanel({ row, policy, position, canAct, modal, onStep, onCl
       aria-modal={modal}
       aria-labelledby="panel-title"
       tabIndex={-1}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onClose();
-        } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !e.altKey && !e.metaKey) {
-          e.preventDefault();
-          onStep(e.key === "ArrowDown" ? 1 : -1);
-        }
-      }}
     >
       <header className="panel-head">
         <div className="panel-title">
