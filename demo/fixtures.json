@@ -46,7 +46,7 @@
     {
       "number": 12,
       "title": "Parse logs line by line from a stream",
-      "body": "Closes #3\n\nUses readline over a file stream so memory stays flat.\n\nPayPal: cy@example.com",
+      "body": "Closes #3\n\nUses readline over a file stream so memory stays flat.\n\nPayPal: sb-8wdhx53622314@personal.example.com",
       "diff": "diff --git a/src/log.ts b/src/log.ts\nindex 7a21f3e..b90c4d2 100644\n--- a/src/log.ts\n+++ b/src/log.ts\n@@ -1,12 +1,14 @@\n-import { readFileSync } from \"node:fs\";\n+import { createReadStream } from \"node:fs\";\n+import { createInterface } from \"node:readline\";\n \n-export function parseLog(path: string): Entry[] {\n-  return readFileSync(path, \"utf8\")\n-    .split(\"\\n\")\n-    .filter(Boolean)\n-    .map(parseLine);\n+export async function* parseLog(path: string): AsyncGenerator<Entry> {\n+  const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });\n+  for await (const line of lines) {\n+    if (line) yield parseLine(line);\n+  }\n }\n",
       "offline": {"decision": "pay", "confidence": 0.9, "reasoning": "parseLog now reads the file through readline over a stream, so memory no longer grows with the file size."}
     },
