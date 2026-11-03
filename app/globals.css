@@ -829,7 +829,9 @@ button {
 .panel-money {
   margin-top: 2px;
   color: var(--muted);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-money strong {

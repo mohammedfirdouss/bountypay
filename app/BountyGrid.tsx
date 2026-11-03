@@ -298,8 +298,11 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
     requestAnimationFrame(() => {
       const api = grid.current?.api;
       const index = id ? api?.getRowNode(id)?.rowIndex : null;
-      if (opener.current && !opener.current.closest(".ag-root")) opener.current.focus();
-      else if (api && index != null) api.setFocusedCell(index, "id");
+      if (opener.current?.isConnected && !opener.current.closest(".ag-root")) opener.current.focus();
+      else if (api && id && index != null) {
+        api.setFocusedCell(index, "id");
+        document.querySelector<HTMLElement>(`[row-id="${CSS.escape(id)}"] .ag-cell[col-id="id"]`)?.focus();
+      }
       opener.current = null;
     });
   }, [selectedId, cancel]);

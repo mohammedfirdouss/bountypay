@@ -73,7 +73,7 @@ export function BountyPanel({ row, policy, position, canAct, modal, onStep, onCl
             {STATES[row.state].label}
           </span>
           <h2 id="panel-title">{row.id}</h2>
-          <p className="panel-money">
+          <p className="panel-money" title={`${usd(row.amount)} to ${row.payee}`}>
             <strong>{usd(row.amount)}</strong> to {row.payee}
           </p>
         </div>
