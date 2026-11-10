@@ -14,6 +14,7 @@ export const PAYOUT_STATUSES = [
   "returned",
   "blocked",
   "refunded",
+  "reversed",
   "canceled",
   "denied",
 ] as const;
@@ -100,6 +101,7 @@ const ITEM_STATUS: Record<string, PayoutStatus> = {
   ONHOLD: "held",
   BLOCKED: "blocked",
   REFUNDED: "refunded",
+  REVERSED: "reversed",
   DENIED: "denied",
 };
 

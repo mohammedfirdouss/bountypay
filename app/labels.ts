@@ -40,6 +40,7 @@ export const PAYPAL: Record<PayoutStatus, string> = {
   returned: "The payout came back unclaimed",
   blocked: "PayPal blocked the payout",
   refunded: "The payout was refunded",
+  reversed: "PayPal reversed the payout and returned the money",
   canceled: "The payout was canceled",
   denied: "PayPal denied the payout",
 };

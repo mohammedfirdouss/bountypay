@@ -413,6 +413,12 @@ describe("flow against fake Claude and PayPal", () => {
     await checkPendingPayouts();
     const b = row(id);
     assert.equal(b.state === "sent" && `${b.payoutStatus} via ${b.payoutStatusVia}`, "failed via lookup");
+
+    const reversed = sentRow(3, "B-reversed");
+    lookups.set("B-reversed", () => Response.json({ items: [{ transaction_status: "REVERSED" }] }));
+    await checkPendingPayouts();
+    const r = row(reversed);
+    assert.equal(r.state === "sent" && r.payoutStatus, "reversed");
   });
 
   test("a failed PayPal lookup leaves the payout pending", async () => {

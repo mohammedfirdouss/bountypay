@@ -533,7 +533,8 @@ button {
 .badge-pp-failed,
 .badge-pp-denied,
 .badge-pp-blocked,
-.badge-pp-returned {
+.badge-pp-returned,
+.badge-pp-reversed {
   background: #fee2e2;
   color: var(--red-800);
 }
