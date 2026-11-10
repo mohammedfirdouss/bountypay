@@ -8,3 +8,6 @@ export function mode(): Mode {
   const v = process.env.BOUNTYPAY_DEMO;
   return v === "offline" ? "offline" : v === "1" ? "demo" : "live";
 }
+
+/** Demo and offline mode both read GitHub from demo/fixtures.json and log comments instead of posting them. */
+export const isDemo = () => mode() !== "live";

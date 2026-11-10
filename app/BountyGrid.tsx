@@ -247,6 +247,14 @@ const sum = (rows: Row[]) => rows.reduce((n, r) => n + r.amount, 0);
 const fingerprint = (r: Row) => `${r.state}|${"payoutStatus" in r ? r.payoutStatus : ""}`;
 const fromControl = (e: Event | null | undefined) => e?.target instanceof Element && !!e.target.closest("button, a, input");
 
+const rowSelection = { mode: "singleRow", checkboxes: false, enableClickSelection: false } as const;
+
+/** Ticks every second on its own, so the grid re-renders only when its rows change. */
+function LiveAge({ rows }: { rows: Row[] }) {
+  const age = useSecondsSince(rows);
+  return <>Live · updated {age < 2 ? "just now" : `${age}s ago`}</>;
+}
+
 function useSecondsSince(rows: Row[]) {
   const [updatedAt, setUpdatedAt] = useState(() => Date.now());
   const [now, setNow] = useState(updatedAt);
@@ -272,7 +280,6 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
   const opener = useRef<HTMLElement | null>(null);
   const seen = useRef<Map<string, string> | null>(null);
   const [demoPending, startDemo] = useTransition();
-  const age = useSecondsSince(rows);
   const review = useReview(canAct, { approve: onApprove, reject: onReject }, setNotice);
 
   useEffect(() => {
@@ -438,7 +445,7 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
           <div className="toolbar-end">
             <span className="live" title={`The grid refreshes every ${REFRESH_MS / 1000} s`}>
               <span className="live-dot" aria-hidden="true" />
-              Live · updated {age < 2 ? "just now" : `${age}s ago`}
+              <LiveAge rows={rows} />
             </span>
             {demo && canAct && (
               <button
@@ -507,7 +514,7 @@ export function BountyGrid({ rows, policy, canAct, demo, onApprove, onReject, on
             if (k.key === "Enter" && e.data && !e.node.rowPinned) open(e.data.id);
             if (k.key === "Escape" && selectedId) close();
           }}
-          rowSelection={{ mode: "singleRow", checkboxes: false, enableClickSelection: false }}
+          rowSelection={rowSelection}
           pinnedBottomRowData={totals}
           rowClassRules={rowClassRules}
           rowHeight={56}

@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Cents, Email } from "./bounty.ts";
-import { mode } from "./mode.ts";
+import { isDemo } from "./mode.ts";
 
 export type MergedPr = {
   repo: string;
@@ -29,8 +29,7 @@ export type Fixtures = {
   prs: { number: number; title: string; body: string; diff: string; offline?: unknown; comments?: string[] }[];
 };
 
-/** Demo and offline mode read GitHub from demo/fixtures.json and log comments instead of posting them. */
-const demo = () => mode() !== "live";
+const TIMEOUT_MS = 10_000;
 
 let fixtures: Fixtures | undefined;
 export function fixture(): Fixtures {
@@ -74,7 +73,7 @@ export function parseWebhook(raw: string, headers: Headers): WebhookResult {
   if (event === "pull_request") result = parseMerge(payload);
   else if (event === "issue_comment") result = parsePayeeComment(payload);
   else return { kind: "ignored", reason: "not a pull_request or issue_comment event" };
-  if (result.kind !== "ignored" && demo() && !isFixture(result.pr)) {
+  if (result.kind !== "ignored" && isDemo() && !isFixture(result.pr)) {
     return { kind: "ignored", reason: "demo mode accepts only the PRs in demo/fixtures.json" };
   }
   return result;
@@ -132,6 +131,7 @@ function isFixture(m: MergedPr): boolean {
 
 async function api(route: string, init: RequestInit = {}): Promise<Response> {
   const res = await fetch(`https://api.github.com${route}`, {
+    signal: AbortSignal.timeout(TIMEOUT_MS),
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -149,7 +149,7 @@ export async function fetchBountyIssue(
   issue: number,
 ): Promise<{ title: string; body: string; amount: Cents } | null> {
   let found: { title: string; body: string; labels: string[] } | undefined;
-  if (demo()) {
+  if (isDemo()) {
     found = repo === fixture().repo ? fixture().issues[issue] : undefined;
   } else {
     const res = await api(`/repos/${repo}/issues/${issue}`);
@@ -167,12 +167,12 @@ export async function fetchBountyIssue(
 }
 
 export async function fetchDiff(repo: string, pr: number): Promise<string> {
-  if (demo()) return fixture().prs.find((p) => p.number === pr)?.diff ?? "";
+  if (isDemo()) return fixture().prs.find((p) => p.number === pr)?.diff ?? "";
   return (await api(`/repos/${repo}/pulls/${pr}`, { headers: { Accept: "application/vnd.github.diff" } })).text();
 }
 
 export async function comment(repo: string, issueOrPr: number, body: string): Promise<void> {
-  if (demo()) {
+  if (isDemo()) {
     console.log(`[demo comment] ${repo}#${issueOrPr}: ${body}`);
     return;
   }
@@ -203,7 +203,7 @@ export function defaultOwners(codeowners: string): string[] {
 export async function maintainers(repo: string): Promise<string[]> {
   const configured = handles((process.env.BOUNTYPAY_MAINTAINERS ?? "").split(","));
   if (configured.length) return configured;
-  if (demo()) return handles(fixture().maintainers ?? []);
+  if (isDemo()) return handles(fixture().maintainers ?? []);
   try {
     for (const file of [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"]) {
       const res = await api(`/repos/${repo}/contents/${file}`, { headers: { Accept: "application/vnd.github.raw+json" } });

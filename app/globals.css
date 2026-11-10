@@ -12,7 +12,6 @@
   --green-50: #ecfdf5;
   --mint: #6ee7b7;
   --amber: #fbbf24;
-  --amber-700: #b45309;
   --amber-50: #fffbeb;
   --red-800: #991b1b;
   --focus: 0 0 0 3px rgb(4 120 87 / 0.28);
@@ -464,6 +463,12 @@ button {
 
 /* Grid cells */
 
+.access-error {
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .num {
   font-variant-numeric: tabular-nums;
 }
@@ -528,7 +533,8 @@ button {
 .badge-pp-failed,
 .badge-pp-denied,
 .badge-pp-blocked,
-.badge-pp-returned {
+.badge-pp-returned,
+.badge-pp-reversed {
   background: #fee2e2;
   color: var(--red-800);
 }
