@@ -395,7 +395,7 @@ let handle: DatabaseSync | undefined;
 
 function db(): DatabaseSync {
   if (handle) return handle;
-  handle = new DatabaseSync(process.env.BOUNTYPAY_DB ?? "bountypay.db");
+  handle = new DatabaseSync(process.env.BOUNTYPAY_DB || "bountypay.db");
   handle.exec(`
     PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS bounties (

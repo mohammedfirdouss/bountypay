@@ -89,7 +89,7 @@ if (values.postman) {
   writeFileSync("bountypay.postman_collection.json", JSON.stringify(collection, null, 2) + "\n");
   console.log(`wrote bountypay.postman_collection.json (${deliveries.length} requests)`);
 } else {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET ?? DEFAULT_SECRET;
+  const secret = process.env.GITHUB_WEBHOOK_SECRET || DEFAULT_SECRET;
   for (const d of deliveries) {
     const res = await fetch(`${values.url}/api/github`, {
       method: "POST",

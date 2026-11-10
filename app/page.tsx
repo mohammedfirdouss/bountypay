@@ -4,7 +4,7 @@ import { after, connection } from "next/server";
 import { Suspense } from "react";
 import { approve, checkPendingPayouts, listBounties, POLICY, reject } from "@/lib/bounty.ts";
 import { ensureDemoSeeded, runDemo } from "@/lib/demo.ts";
-import { mode } from "@/lib/mode.ts";
+import { isDemo, mode } from "@/lib/mode.ts";
 import { BountyGrid } from "./BountyGrid.tsx";
 import type { Outcome } from "./Review.tsx";
 
@@ -42,13 +42,11 @@ async function onReject(id: string): Promise<Outcome> {
   return OK;
 }
 
-const demo = () => mode() !== "live";
-
 async function onRunDemo(): Promise<Outcome> {
   "use server";
   refresh();
   if (!(await authorized())) return LOCKED;
-  if (!demo()) return { ok: false, message: "The demo only runs in demo or offline mode." };
+  if (!isDemo()) return { ok: false, message: "The demo only runs in demo or offline mode." };
   after(() => runDemo().catch((e) => console.error("demo replay failed:", e)));
   return OK;
 }
@@ -165,7 +163,7 @@ async function Dashboard() {
       rows={listBounties()}
       policy={POLICY}
       canAct={canAct}
-      demo={demo()}
+      demo={isDemo()}
       onApprove={onApprove}
       onReject={onReject}
       onRunDemo={onRunDemo}
