@@ -463,6 +463,12 @@ button {
 
 /* Grid cells */
 
+.access-error {
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .num {
   font-variant-numeric: tabular-nums;
 }

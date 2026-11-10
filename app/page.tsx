@@ -142,8 +142,14 @@ async function Access() {
       </p>
     );
   }
+  const wrong = (await cookies()).has(COOKIE);
   return (
     <form action={unlock} className="access">
+      {wrong && (
+        <p className="access-error" role="alert">
+          Wrong token. Try again.
+        </p>
+      )}
       <label className="access-field">
         <Lock open={false} />
         <input name="token" type="password" placeholder="Dashboard token" aria-label="Dashboard token" />
