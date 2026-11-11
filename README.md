@@ -7,6 +7,7 @@
 Open-source bounties, paid through PayPal once Claude checks the merged PR.
 
 [![Live demo](https://img.shields.io/badge/live_demo-bountypay.onrender.com-064e3b)](https://bountypay.onrender.com)
+[![Demo video](https://img.shields.io/badge/demo_video-YouTube-c4302b)](https://youtu.be/LESBBTHwmQg)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue)](#license)
 [![Built with Claude](https://img.shields.io/badge/built_with-Claude-d97757)](https://www.anthropic.com/claude)
 [![PayPal sandbox](https://img.shields.io/badge/PayPal-sandbox_Payouts-003087)](https://developer.paypal.com/docs/payouts/)
@@ -20,6 +21,7 @@ Open-source maintainers put bounties on issues, then check PRs and send money by
 
 ## For judges
 
+- **Demo video:** https://youtu.be/LESBBTHwmQg (under 3 minutes).
 - **Live demo:** https://bountypay.onrender.com. It runs on Render's free tier, so the first load after idle takes about 50 seconds.
 - **Dashboard token:** in the Devpost testing instructions. You need it to use Approve and Reject.
 - **Try it:**
@@ -27,7 +29,7 @@ Open-source maintainers put bounties on issues, then check PRs and send money by
   2. Within a minute, Claude judges each PR. PR #10 is paid automatically, and its PayPal status turns `succeeded`. PR #11 (typo-only), PR #12 (over the cap) and PR #15 (a prompt-injection attempt) are held, each with Claude's reasoning. PR #14 was merged without a PayPal line, so it claims its bounty when its author comments one.
   3. Unlock with the token and approve PR #11. Search, filter by state, or export CSV.
 - **Real:** Claude (`claude-opus-5-5`) and PayPal sandbox Payouts.
-- **Simulated:** GitHub issues and diffs come from `demo/fixtures.json`.
+- **Simulated:** GitHub issues and diffs come from `demo/fixtures.json`. They mirror the real repo [bountypay/demo](https://github.com/bountypay/demo), where the same PRs were merged and BountyPay posted its comments, so every dashboard link opens a real issue or PR.
 
 ## How it works
 
